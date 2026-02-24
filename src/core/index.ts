@@ -10,7 +10,8 @@ export {
 
 // Data types
 export type { Entry, EntryInput } from "./entry.ts";
-export type { LogInput, LogOutput, LogContext, ReadContext } from "./log.ts";
+export type { LogInput, LogOutput } from "./log.ts";
+export type { LogContext, ReadContext } from "./context.ts";
 export type { QueryInput, QueryOutput } from "./query.ts";
 export type { StatusOutput } from "./status.ts";
 export type { JoaConfig, PresetConfig, PresetName } from "./config.ts";

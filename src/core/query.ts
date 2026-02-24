@@ -1,11 +1,14 @@
 import type { JoaConfig, PresetName } from "./config.ts";
+import type { ReadContext } from "./context.ts";
 import type { JoaDb, QueryParams, ThreadSummaryRow } from "./db.ts";
 import type { Entry } from "./entry.ts";
 import { deserializeEntry } from "./entry.ts";
 import { formatCompact, formatJson, formatMd } from "./formatters.ts";
-import type { ReadContext } from "./log.ts";
 import { parseSince } from "./time.ts";
 import type { ISOTimestamp } from "./time.ts";
+
+const MAX_LIMIT = 1000;
+const MAX_SEARCH_LENGTH = 500;
 
 export interface QueryInput {
   preset?: PresetName;
@@ -90,17 +93,17 @@ export function query(input: QueryInput, ctx: ReadContext, config: JoaConfig): Q
   if (input.since) params.since = parseSince(input.since);
   if (input.until) params.until = parseSince(input.until);
   if (input.limit !== undefined) params.limit = input.limit;
-  if (!params.limit) params.limit = 50;
+  params.limit = Math.min(params.limit ?? 50, MAX_LIMIT);
 
-  // FTS search — escape special chars
+  // FTS search — escape special chars, truncate long queries
   if (input.search) {
-    params.search = escapeFts(input.search);
+    const trimmed = input.search.slice(0, MAX_SEARCH_LENGTH);
+    params.search = escapeFts(trimmed);
   }
 
   // Get total count (before limit)
   const countParams = { ...params };
   countParams.limit = undefined;
-  countParams.offset = undefined;
   const total = ctx.db.countEntries(countParams);
 
   // Query entries

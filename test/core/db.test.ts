@@ -1,26 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { openDatabase } from "../../src/core/db.ts";
 import type { JoaDb } from "../../src/core/db.ts";
-import type { Entry } from "../../src/core/entry.ts";
-import { entryId, sessionId, threadId } from "../../src/core/ids.ts";
-
-function makeEntry(overrides?: Partial<Entry>): Entry {
-  return {
-    id: entryId(),
-    timestamp: new Date().toISOString(),
-    category: "decision",
-    summary: "Test summary",
-    thread_id: null,
-    session_id: sessionId(),
-    agent: "test-agent",
-    device: "test-device",
-    resources: ["src/foo.ts"],
-    tags: ["test"],
-    detail: { key: "value" },
-    annotations: {},
-    ...overrides,
-  };
-}
+import { threadId } from "../../src/core/ids.ts";
+import { makeEntry } from "./helpers.ts";
 
 describe("db", () => {
   let db: JoaDb;
@@ -172,6 +154,55 @@ describe("db", () => {
 
     expect(db.countEntries({})).toBe(3);
     expect(db.countEntries({ category: "decision" })).toBe(2);
+  });
+
+  test("tag filter uses exact match via json_each (no substring matching)", () => {
+    db.writeEntry(makeEntry({ tags: ["deploy-staging"] }));
+    db.writeEntry(makeEntry({ tags: ["deploy"] }));
+
+    // Searching for "deploy" must NOT match "deploy-staging"
+    const results = db.queryEntries({ tags: ["deploy"] });
+    expect(results.length).toBe(1);
+    expect(JSON.parse(results[0]!.tags)).toEqual(["deploy"]);
+  });
+
+  test("writeEntries batch inserts multiple entries in a single transaction", () => {
+    const entries = [
+      makeEntry({ summary: "batch 1" }),
+      makeEntry({ summary: "batch 2" }),
+      makeEntry({ summary: "batch 3" }),
+    ];
+
+    db.writeEntries(entries);
+
+    expect(db.countEntries({})).toBe(3);
+    // Verify FTS works for batch-inserted entries
+    const ftsResults = db.queryEntries({ search: '"batch 2"' });
+    expect(ftsResults.length).toBe(1);
+    expect(ftsResults[0]?.summary).toBe("batch 2");
+  });
+
+  test("writeEntries skips duplicates via INSERT OR IGNORE", () => {
+    const entry = makeEntry({ summary: "original" });
+    db.writeEntry(entry);
+
+    // Batch insert including the same entry again
+    db.writeEntries([entry, makeEntry({ summary: "new one" })]);
+
+    expect(db.countEntries({})).toBe(2);
+  });
+
+  test("clearEntries removes all entries and FTS data", () => {
+    db.writeEntry(makeEntry({ summary: "entry one" }));
+    db.writeEntry(makeEntry({ summary: "entry two" }));
+    expect(db.countEntries({})).toBe(2);
+
+    db.clearEntries();
+
+    expect(db.countEntries({})).toBe(0);
+    // Verify FTS is also cleared
+    const ftsResults = db.queryEntries({ search: '"entry one"' });
+    expect(ftsResults.length).toBe(0);
   });
 });
 

@@ -49,7 +49,19 @@ export async function readJournalFile(filePath: string): Promise<EntryRow[]> {
 
   for (const line of lines) {
     try {
-      const row = JSON.parse(line) as EntryRow;
+      const parsed = JSON.parse(line);
+      if (
+        typeof parsed !== "object" ||
+        parsed === null ||
+        typeof parsed.id !== "string" ||
+        typeof parsed.summary !== "string"
+      ) {
+        console.warn(
+          `Skipping invalid entry in ${filePath}: missing required fields: ${line.slice(0, 80)}`,
+        );
+        continue;
+      }
+      const row = parsed as EntryRow;
       entries.push(row);
     } catch {
       console.warn(`Skipping malformed JSONL line in ${filePath}: ${line.slice(0, 80)}`);

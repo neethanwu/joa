@@ -1,34 +1,11 @@
-import type { JoaDb } from "./db.ts";
+import type { LogContext } from "./context.ts";
 import type { Entry, EntryInput } from "./entry.ts";
 import { normalizeCategory, validateEntryInput } from "./entry.ts";
-import { JournalWriteError } from "./errors.ts";
-import { entryId, threadId as generateThreadId, isThreadId } from "./ids.ts";
+import { entryId, threadId as generateThreadId } from "./ids.ts";
 import { appendEntry } from "./journal.ts";
 import { nowUtc } from "./time.ts";
 
-/** Read context — minimal, for query() and status(). */
-export interface ReadContext {
-  readonly db: JoaDb;
-}
-
-/** Write context — extends read, adds write-path metadata. */
-export interface LogContext extends ReadContext {
-  readonly journalsDir: string;
-  readonly sessionId: string;
-  readonly agent: string | null;
-  readonly device: string | null;
-  readonly defaultTags: readonly string[];
-}
-
-export interface LogInput {
-  category: string;
-  summary: string;
-  thread_id?: string | null;
-  detail?: Record<string, unknown>;
-  resources?: string[];
-  tags?: string[];
-  annotations?: Record<string, unknown>;
-}
+export type LogInput = EntryInput;
 
 export interface LogOutput {
   entry_id: string;
@@ -44,14 +21,10 @@ function resolveThreadId(tid: string | null | undefined): string | null {
   return tid; // already validated by validateEntryInput
 }
 
-function dedupe(arr: string[]): string[] {
-  return [...new Set(arr)];
-}
-
 /** Write a journal entry. JSONL first (source of truth), then SQLite (derived index). */
 export async function log(input: LogInput, ctx: LogContext): Promise<LogOutput> {
   // 1. Validate before any I/O
-  validateEntryInput(input as EntryInput);
+  validateEntryInput(input);
 
   // 2. Resolve thread_id
   const resolvedThreadId = resolveThreadId(input.thread_id);
@@ -67,17 +40,13 @@ export async function log(input: LogInput, ctx: LogContext): Promise<LogOutput> 
     agent: ctx.agent,
     device: ctx.device,
     resources: input.resources ?? [],
-    tags: dedupe([...(input.tags ?? []), ...ctx.defaultTags]),
+    tags: [...new Set([...(input.tags ?? []), ...ctx.defaultTags])],
     detail: input.detail ?? {},
     annotations: input.annotations ?? {},
   };
 
   // 4. JSONL first — source of truth
-  try {
-    await appendEntry(entry, ctx.journalsDir);
-  } catch (cause) {
-    throw new JournalWriteError("Failed to append entry to journal", { cause });
-  }
+  await appendEntry(entry, ctx.journalsDir);
 
   // 5. SQLite second — derived index
   try {

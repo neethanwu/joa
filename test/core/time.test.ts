@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { ValidationError } from "../../src/core/errors.ts";
 import { nowUtc, parseSince, todayDate } from "../../src/core/time.ts";
 
 describe("parseSince", () => {
@@ -37,6 +38,15 @@ describe("parseSince", () => {
   test("ISO datetime passes through", () => {
     const ts = "2025-02-18T10:30:00.000Z";
     expect(parseSince(ts) as string).toBe(ts);
+  });
+
+  test("ISO datetime without milliseconds passes through", () => {
+    const ts = "2025-02-18T10:30:00Z";
+    expect(parseSince(ts) as string).toBe(ts);
+  });
+
+  test("arbitrary string throws ValidationError", () => {
+    expect(() => parseSince("hello")).toThrow(ValidationError);
   });
 });
 

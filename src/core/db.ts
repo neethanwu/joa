@@ -16,7 +16,6 @@ export interface QueryParams {
   since?: ISOTimestamp;
   until?: ISOTimestamp;
   limit?: number;
-  offset?: number;
 }
 
 export interface ThreadSummaryRow {
@@ -31,6 +30,8 @@ export interface ThreadSummaryRow {
 /** Narrow database interface — decouples operation layer from bun:sqlite. */
 export interface JoaDb {
   writeEntry(entry: Entry): void;
+  writeEntries(entries: Entry[]): void;
+  clearEntries(): void;
   queryEntries(params: QueryParams): EntryRow[];
   countEntries(params: QueryParams): number;
   queryThreadSummary(limit: number): ThreadSummaryRow[];
@@ -66,6 +67,9 @@ CREATE TABLE IF NOT EXISTS entries (
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- NOTE: FTS5 external content table. INSERT is handled in writeEntry transaction.
+-- DELETE/UPDATE requires manual FTS cleanup — must be implemented when entry
+-- deletion is added. See: https://www.sqlite.org/fts5.html#external_content_tables
 CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts USING fts5(
   summary, detail, resources, tags,
   content=entries,
@@ -133,8 +137,10 @@ function buildWhereClause(params: QueryParams): { sql: string; values: BindValue
   }
   if (params.tags?.length) {
     for (const tag of params.tags) {
-      conditions.push("e.tags LIKE ?");
-      values.push(`%"${tag}"%`);
+      conditions.push(
+        "e.id IN (SELECT je.id FROM entries je, json_each(je.tags) AS t WHERE t.value = ?)",
+      );
+      values.push(tag);
     }
   }
   if (params.search) {
@@ -154,6 +160,7 @@ export function openDatabase(dbPath: string): JoaDb {
   db.exec("PRAGMA synchronous = NORMAL;");
   db.exec("PRAGMA foreign_keys = ON;");
   db.exec("PRAGMA cache_size = -32000;");
+  db.exec("PRAGMA busy_timeout = 5000;");
   db.exec(SCHEMA);
 
   // Prepared statements
@@ -207,16 +214,46 @@ export function openDatabase(dbPath: string): JoaDb {
       }
     },
 
+    writeEntries(entries: Entry[]): void {
+      try {
+        db.transaction(() => {
+          for (const entry of entries) {
+            const row = serializeEntry(entry);
+            const result = insertEntry.run(
+              row.id,
+              row.timestamp,
+              row.category,
+              row.summary,
+              row.thread_id,
+              row.session_id,
+              row.agent,
+              row.device,
+              row.resources,
+              row.tags,
+              row.detail,
+              row.annotations,
+            );
+            if (result.changes > 0) {
+              insertFts.run(row.id);
+            }
+          }
+        })();
+      } catch (cause) {
+        throw new DatabaseError("Failed to write entries to database", { cause });
+      }
+    },
+
+    clearEntries(): void {
+      db.exec("DELETE FROM entries_fts");
+      db.exec("DELETE FROM entries");
+    },
+
     queryEntries(params: QueryParams): EntryRow[] {
       const { sql: where, values } = buildWhereClause(params);
       let query = `SELECT e.* FROM entries e ${where} ORDER BY e.timestamp DESC`;
       if (params.limit) {
         query += " LIMIT ?";
         values.push(params.limit);
-      }
-      if (params.offset) {
-        query += " OFFSET ?";
-        values.push(params.offset);
       }
       return db.prepare(query).all(...values) as EntryRow[];
     },

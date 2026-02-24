@@ -1,7 +1,8 @@
 import { statSync } from "node:fs";
 import type { JoaDb } from "./db.ts";
+import type { Entry } from "./entry.ts";
+import { deserializeEntry } from "./entry.ts";
 import { listJournalFiles, readJournalFile } from "./journal.ts";
-import { nowUtc } from "./time.ts";
 
 /**
  * Called on every process startup after openDatabase().
@@ -27,32 +28,34 @@ export async function checkAndSyncIfStale(db: JoaDb, journalsDir: string): Promi
 
   if (staleFiles.length === 0) return;
 
+  // Capture max mtime of stale files BEFORE processing to avoid data loss window
+  let maxMtimeMs = 0;
+  for (const f of staleFiles) {
+    try {
+      const mtime = statSync(f).mtimeMs;
+      if (mtime > maxMtimeMs) maxMtimeMs = mtime;
+    } catch {
+      /* already filtered */
+    }
+  }
+
   for (const file of staleFiles) {
     const rows = await readJournalFile(file);
+    const entries: Entry[] = [];
     for (const row of rows) {
       try {
-        // INSERT OR IGNORE — skips already-indexed entries by PK
-        db.writeEntry({
-          id: row.id,
-          timestamp: row.timestamp,
-          category: row.category,
-          summary: row.summary,
-          thread_id: row.thread_id,
-          session_id: row.session_id,
-          agent: row.agent,
-          device: row.device,
-          resources: JSON.parse(row.resources),
-          tags: JSON.parse(row.tags),
-          detail: JSON.parse(row.detail),
-          annotations: JSON.parse(row.annotations),
-        });
+        entries.push(deserializeEntry(row));
       } catch {
         console.warn(`Skipping entry during sync: ${row.id}`);
       }
     }
+    if (entries.length > 0) {
+      db.writeEntries(entries);
+    }
   }
 
-  db.setLastIndexedAt(nowUtc());
+  // Use the max mtime instead of nowUtc() to avoid missing files modified during sync
+  db.setLastIndexedAt(new Date(maxMtimeMs).toISOString());
 }
 
 /**
@@ -60,32 +63,37 @@ export async function checkAndSyncIfStale(db: JoaDb, journalsDir: string): Promi
  * For use when the index is corrupted or during joa rebuild.
  */
 export async function rebuildIndex(db: JoaDb, journalsDir: string): Promise<void> {
+  db.clearEntries();
   const files = await listJournalFiles(journalsDir);
+
+  // Capture max mtime of all files BEFORE processing
+  let maxMtimeMs = 0;
+  for (const f of files) {
+    try {
+      const mtime = statSync(f).mtimeMs;
+      if (mtime > maxMtimeMs) maxMtimeMs = mtime;
+    } catch {
+      /* skip unreadable files */
+    }
+  }
 
   for (const file of files) {
     const rows = await readJournalFile(file);
+    const entries: Entry[] = [];
     for (const row of rows) {
       try {
-        db.writeEntry({
-          id: row.id,
-          timestamp: row.timestamp,
-          category: row.category,
-          summary: row.summary,
-          thread_id: row.thread_id,
-          session_id: row.session_id,
-          agent: row.agent,
-          device: row.device,
-          resources: JSON.parse(row.resources),
-          tags: JSON.parse(row.tags),
-          detail: JSON.parse(row.detail),
-          annotations: JSON.parse(row.annotations),
-        });
+        entries.push(deserializeEntry(row));
       } catch {
         console.warn(`Skipping entry during rebuild: ${row.id}`);
       }
     }
+    if (entries.length > 0) {
+      db.writeEntries(entries);
+    }
   }
 
   db.rebuildFts();
-  db.setLastIndexedAt(nowUtc());
+  if (maxMtimeMs > 0) {
+    db.setLastIndexedAt(new Date(maxMtimeMs).toISOString());
+  }
 }

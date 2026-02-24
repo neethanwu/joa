@@ -5,27 +5,9 @@ import {
   serializeEntry,
   validateEntryInput,
 } from "../../src/core/entry.ts";
-import type { Entry } from "../../src/core/entry.ts";
 import { InvalidThreadId, ValidationError } from "../../src/core/errors.ts";
-import { entryId, sessionId, threadId } from "../../src/core/ids.ts";
-
-function makeEntry(overrides?: Partial<Entry>): Entry {
-  return {
-    id: entryId(),
-    timestamp: new Date().toISOString(),
-    category: "decision",
-    summary: "Test summary",
-    thread_id: null,
-    session_id: sessionId(),
-    agent: "test-agent",
-    device: "test-device",
-    resources: ["src/foo.ts"],
-    tags: ["test"],
-    detail: { key: "value" },
-    annotations: { confidence: "high" },
-    ...overrides,
-  };
-}
+import { threadId } from "../../src/core/ids.ts";
+import { makeEntry } from "./helpers.ts";
 
 describe("normalizeCategory", () => {
   test('"Decision" → "decision"', () => {

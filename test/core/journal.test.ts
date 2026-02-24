@@ -2,27 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Entry } from "../../src/core/entry.ts";
-import { entryId, sessionId } from "../../src/core/ids.ts";
 import { appendEntry, listJournalFiles, readJournalFile } from "../../src/core/journal.ts";
-
-function makeEntry(overrides?: Partial<Entry>): Entry {
-  return {
-    id: entryId(),
-    timestamp: new Date().toISOString(),
-    category: "decision",
-    summary: "Test summary",
-    thread_id: null,
-    session_id: sessionId(),
-    agent: "test-agent",
-    device: "test-device",
-    resources: [],
-    tags: [],
-    detail: {},
-    annotations: {},
-    ...overrides,
-  };
-}
+import { makeEntry } from "./helpers.ts";
 
 describe("journal", () => {
   let tmp: string;
@@ -73,6 +54,13 @@ describe("journal", () => {
     writeFileSync(files[0]!, `${content}not valid json\n`);
     const rows = await readJournalFile(files[0]!);
     expect(rows.length).toBe(1);
+  });
+
+  test("readJournalFile skips valid JSON that is not a valid EntryRow", async () => {
+    const filePath = join(tmp, "2025-03-01.jsonl");
+    writeFileSync(filePath, '{"foo": 42}\n');
+    const rows = await readJournalFile(filePath);
+    expect(rows.length).toBe(0);
   });
 
   test("listJournalFiles returns files sorted by date", async () => {

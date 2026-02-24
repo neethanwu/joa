@@ -1,7 +1,7 @@
 import { readdirSync } from "node:fs";
 import type { JoaConfig } from "./config.ts";
 import { resolveDbPath, resolveJournalsPath } from "./config.ts";
-import type { ReadContext } from "./log.ts";
+import type { ReadContext } from "./context.ts";
 
 export interface StatusOutput {
   total_entries: number;

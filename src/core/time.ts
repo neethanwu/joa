@@ -1,3 +1,5 @@
+import { ValidationError } from "./errors.ts";
+
 /** Branded type for validated ISO 8601 UTC timestamps. */
 export type ISOTimestamp = string & { readonly __brand: "ISOTimestamp" };
 
@@ -35,7 +37,12 @@ export function parseSince(since: string): ISOTimestamp {
     return `${since}T00:00:00.000Z` as ISOTimestamp;
   }
 
-  // ISO datetime — pass through
+  // ISO datetime — validate before pass through
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$/.test(since)) {
+    throw new ValidationError(
+      `Invalid ISO 8601 timestamp: "${since}". Expected format: YYYY-MM-DDTHH:mm:ss.sssZ or YYYY-MM-DDTHH:mm:ssZ`,
+    );
+  }
   return since as ISOTimestamp;
 }
 

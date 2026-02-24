@@ -2,27 +2,9 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { defaultConfig } from "../../src/core/config.ts";
 import { openDatabase } from "../../src/core/db.ts";
 import type { JoaDb } from "../../src/core/db.ts";
-import type { Entry } from "../../src/core/entry.ts";
-import { entryId, sessionId } from "../../src/core/ids.ts";
+import { sessionId } from "../../src/core/ids.ts";
 import { status } from "../../src/core/status.ts";
-
-function makeEntry(overrides?: Partial<Entry>): Entry {
-  return {
-    id: entryId(),
-    timestamp: new Date().toISOString(),
-    category: "decision",
-    summary: "Test summary",
-    thread_id: null,
-    session_id: sessionId(),
-    agent: "test-agent",
-    device: "test-device",
-    resources: [],
-    tags: [],
-    detail: {},
-    annotations: {},
-    ...overrides,
-  };
-}
+import { makeEntry } from "./helpers.ts";
 
 describe("status", () => {
   let db: JoaDb;

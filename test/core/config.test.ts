@@ -18,8 +18,6 @@ describe("config", () => {
     expect(config.defaults.tags).toEqual([]);
     expect(config.db.path).toBe("~/.joa/journal.db");
     expect(config.journals.path).toBe("~/.joa/journals");
-    expect(config.mcp.http_port).toBe(7070);
-    expect(config.search.vector_enabled).toBe(false);
     expect(config.presets.catchup).toBeDefined();
     expect(config.presets.threads).toBeDefined();
   });

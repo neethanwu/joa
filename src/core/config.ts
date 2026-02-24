@@ -7,11 +7,8 @@ import { ConfigError } from "./errors.ts";
 export type PresetName = "catchup" | "threads" | "timeline" | "decisions" | "changes";
 
 export interface PresetConfig {
-  key_categories?: string[];
-  summarize_others?: boolean;
   default_limit?: number;
   thread_limit?: number;
-  include_stats?: boolean;
   categories?: string[];
 }
 
@@ -23,9 +20,6 @@ export interface JoaConfig {
   };
   db: { path: string };
   journals: { path: string };
-  mcp: { http_port: number };
-  search: { vector_enabled: boolean };
-  logging: { categories: Record<string, { suggested_detail: string[] }> };
   presets: Partial<Record<PresetName, PresetConfig>>;
 }
 
@@ -39,28 +33,11 @@ export function defaultConfig(): JoaConfig {
     },
     db: { path: "~/.joa/journal.db" },
     journals: { path: "~/.joa/journals" },
-    mcp: { http_port: 7070 },
-    search: { vector_enabled: false },
-    logging: {
-      categories: {
-        "file change": {
-          suggested_detail: ["path", "language", "diff_summary", "lines_changed", "reason"],
-        },
-        decision: { suggested_detail: ["decision", "reasoning", "alternatives", "confidence"] },
-        error: { suggested_detail: ["error", "resolution", "stack_trace"] },
-        command: { suggested_detail: ["command", "exit_code", "duration_ms"] },
-        test: { suggested_detail: ["passed", "failed", "skipped", "duration_ms"] },
-        conversation: { suggested_detail: ["context", "people", "topics"] },
-        memory: { suggested_detail: ["context", "related_to"] },
-      },
-    },
     presets: {
       catchup: {
-        key_categories: ["decision", "error", "milestone", "plan"],
-        summarize_others: true,
         default_limit: 50,
       },
-      threads: { thread_limit: 20, include_stats: true },
+      threads: { thread_limit: 20 },
       timeline: { default_limit: 50 },
       decisions: { categories: ["decision"], default_limit: 50 },
       changes: { categories: ["file change"], default_limit: 50 },
@@ -113,11 +90,6 @@ function mergeConfig(
   if (db?.path) result.db.path = db.path as string;
   const journals = overlay.journals as Record<string, unknown> | undefined;
   if (journals?.path) result.journals.path = journals.path as string;
-  const mcp = overlay.mcp as Record<string, unknown> | undefined;
-  if (mcp?.http_port !== undefined) result.mcp.http_port = mcp.http_port as number;
-  const search = overlay.search as Record<string, unknown> | undefined;
-  if (search?.vector_enabled !== undefined)
-    result.search.vector_enabled = search.vector_enabled as boolean;
   const presets = overlay.presets as Record<string, unknown> | undefined;
   if (presets) {
     for (const [key, value] of Object.entries(presets)) {

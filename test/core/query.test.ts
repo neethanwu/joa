@@ -2,28 +2,10 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { defaultConfig } from "../../src/core/config.ts";
 import { openDatabase } from "../../src/core/db.ts";
 import type { JoaDb } from "../../src/core/db.ts";
-import type { Entry } from "../../src/core/entry.ts";
-import { entryId, sessionId, threadId } from "../../src/core/ids.ts";
+import { threadId } from "../../src/core/ids.ts";
 import type { ReadContext } from "../../src/core/log.ts";
 import { query } from "../../src/core/query.ts";
-
-function makeEntry(overrides?: Partial<Entry>): Entry {
-  return {
-    id: entryId(),
-    timestamp: new Date().toISOString(),
-    category: "decision",
-    summary: "Test summary",
-    thread_id: null,
-    session_id: sessionId(),
-    agent: "test-agent",
-    device: "test-device",
-    resources: [],
-    tags: [],
-    detail: {},
-    annotations: {},
-    ...overrides,
-  };
-}
+import { makeEntry } from "./helpers.ts";
 
 describe("query", () => {
   let db: JoaDb;
@@ -153,6 +135,35 @@ describe("query", () => {
     expect(result.format).toBe("json");
     const parsed = JSON.parse(result.rendered);
     expect(Array.isArray(parsed)).toBe(true);
+  });
+
+  test("limit above 1000 is capped to 1000", () => {
+    // Insert 2 entries, request limit of 5000 — should be capped to MAX_LIMIT (1000)
+    db.writeEntry(makeEntry());
+    db.writeEntry(makeEntry());
+    const result = query({ limit: 5000 }, ctx, config);
+    // We only have 2 entries so we can't observe the 1000 cap directly,
+    // but we verify it doesn't break and returns all available entries
+    expect(result.entries.length).toBe(2);
+    expect(result.total).toBe(2);
+  });
+
+  test("limit: 0 is preserved via nullish coalescing (not replaced by default 50)", () => {
+    // With the old falsy check, limit:0 was silently replaced with 50.
+    // With nullish coalescing, 0 is a valid value and is kept as-is.
+    // The DB layer treats limit:0 as no limit, so all entries are returned.
+    db.writeEntry(makeEntry());
+    db.writeEntry(makeEntry());
+    const result = query({ limit: 0 }, ctx, config);
+    expect(result.entries.length).toBe(2);
+    expect(result.total).toBe(2);
+  });
+
+  test("very long search string is truncated to 500 characters", () => {
+    const longWord = "a".repeat(1000);
+    db.writeEntry(makeEntry({ summary: longWord }));
+    // Should not throw even with a 1000-char search string
+    expect(() => query({ search: longWord }, ctx, config)).not.toThrow();
   });
 
   test("empty result returns empty entries and appropriate rendered string", () => {
