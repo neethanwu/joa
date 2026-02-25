@@ -4,6 +4,9 @@
   "type": "module",
   "description": "Journal of Agents — persistent activity journal for AI agents",
   "main": "dist/core/index.js",
+  "bin": {
+    "joa": "src/cli/main.ts"
+  },
   "scripts": {
     "test": "bun test",
     "build": "bun build src/core/index.ts --outdir dist/core --target bun",
@@ -12,8 +15,11 @@
     "typecheck": "bunx tsc --noEmit"
   },
   "dependencies": {
+    "@clack/prompts": "^1.0.1",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "js-yaml": "^4.1.0",
-    "ulidx": "^2.3.0"
+    "ulidx": "^2.3.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.0",

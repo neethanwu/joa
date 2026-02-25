@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { defaultConfig } from "../../src/core/config.ts";
+import type { ReadContext } from "../../src/core/context.ts";
 import { openDatabase } from "../../src/core/db.ts";
 import type { JoaDb } from "../../src/core/db.ts";
 import { threadId } from "../../src/core/ids.ts";
-import type { ReadContext } from "../../src/core/log.ts";
 import { query } from "../../src/core/query.ts";
 import { makeEntry } from "./helpers.ts";
 

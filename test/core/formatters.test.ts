@@ -11,7 +11,7 @@ const formatterDefaults = {
   resources: ["src/db.ts"],
   tags: ["backend"],
   detail: { reasoning: "write-heavy workload" },
-} as const;
+};
 
 describe("formatMd", () => {
   test("returns non-empty string with expected structure", () => {

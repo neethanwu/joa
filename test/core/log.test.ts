@@ -2,13 +2,13 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { LogContext } from "../../src/core/context.ts";
 import { openDatabase } from "../../src/core/db.ts";
 import type { JoaDb } from "../../src/core/db.ts";
 import { InvalidThreadId, JournalWriteError } from "../../src/core/errors.ts";
 import { isEntryId, isThreadId, sessionId } from "../../src/core/ids.ts";
 import { listJournalFiles, readJournalFile } from "../../src/core/journal.ts";
 import { log } from "../../src/core/log.ts";
-import type { LogContext } from "../../src/core/log.ts";
 
 function makeCtx(db: JoaDb, journalsDir: string): LogContext {
   return {
