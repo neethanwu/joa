@@ -1,18 +1,16 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import {
-  type JoaConfig,
-  type JoaDb,
-  type LogContext,
-  type ReadContext,
-  checkAndSyncIfStale,
-  getDevice,
-  loadConfig,
-  openDatabase,
-  resolveDbPath,
-  resolveJournalsPath,
-  sessionId,
-} from "../core/index.ts";
+import type { JoaConfig } from "./config.ts";
+import { getDevice, loadConfig, resolveDbPath, resolveJournalsPath } from "./config.ts";
+import type { LogContext, ReadContext } from "./context.ts";
+import type { JoaDb } from "./db.ts";
+import { openDatabase } from "./db.ts";
+import { sessionId } from "./ids.ts";
+import { checkAndSyncIfStale } from "./sync.ts";
+
+export interface BootstrapOptions {
+  agent?: string;
+}
 
 export interface BootstrapResult {
   config: JoaConfig;
@@ -22,7 +20,7 @@ export interface BootstrapResult {
   sid: string;
 }
 
-export async function bootstrap(): Promise<BootstrapResult> {
+export async function bootstrap(opts?: BootstrapOptions): Promise<BootstrapResult> {
   const config = loadConfig();
   const dbPath = resolveDbPath(config);
   mkdirSync(dirname(dbPath), { recursive: true });
@@ -35,7 +33,7 @@ export async function bootstrap(): Promise<BootstrapResult> {
     db,
     journalsDir: resolveJournalsPath(config),
     sessionId: sid,
-    agent: config.defaults.agent ?? "cli",
+    agent: opts?.agent ?? config.defaults.agent ?? "cli",
     device: getDevice(config),
     defaultTags: config.defaults.tags,
   };

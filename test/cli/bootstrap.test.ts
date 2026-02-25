@@ -13,8 +13,10 @@ describe("bootstrap", () => {
 
   test("bootstrap returns all required fields", async () => {
     // We test the bootstrap pattern manually rather than calling bootstrap()
-    // because bootstrap() reads from the real filesystem (~/.joa/).
-    // This tests the same logic with controlled inputs.
+    // because bootstrap() reads from the real filesystem (~/.joa/) and has
+    // side effects (creates directories, opens the real DB). Mocking the
+    // filesystem would obscure the intent. Instead we replicate the same
+    // sequence of calls with controlled inputs to verify the contract.
     const { loadConfig, getDevice, resolveJournalsPath, sessionId, checkAndSyncIfStale } =
       await import("../../src/core/index.ts");
 

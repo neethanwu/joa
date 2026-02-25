@@ -4,13 +4,20 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 import yaml from "js-yaml";
-import { loadConfig, resolveJournalsPath } from "../core/config.ts";
-import type { EntryRow } from "../core/entry.ts";
-import { deserializeEntry, serializeEntry } from "../core/entry.ts";
-import { log, query, rebuildIndex, status } from "../core/index.ts";
+import {
+  DatabaseError,
+  ValidationError,
+  bootstrap,
+  importEntries,
+  loadConfig,
+  log,
+  query,
+  rebuildIndex,
+  resolveJournalsPath,
+  serializeEntry,
+  status,
+} from "../core/index.ts";
 import type { PresetName } from "../core/index.ts";
-import { appendEntry } from "../core/journal.ts";
-import { bootstrap } from "./bootstrap.ts";
 import { bold, colorizeCompactLine, cyan, dim, green, red, yellow } from "./output.ts";
 
 // ---------------------------------------------------------------------------
@@ -40,41 +47,12 @@ const { values, positionals } = parseArgs({
     session: { type: "string" },
     agent: { type: "string" },
     device: { type: "string" },
-    // Export/Import
-    force: { type: "boolean" },
   },
   allowPositionals: true,
-  strict: false,
 });
 
 const command = positionals[0] ?? "";
 const args = positionals.slice(1);
-
-// ---------------------------------------------------------------------------
-// Loose values type — accepts parseArgs output and spread overrides
-// ---------------------------------------------------------------------------
-
-interface CmdValues {
-  preset?: string;
-  search?: string;
-  category?: string;
-  tag?: string[];
-  thread?: string;
-  session?: string;
-  agent?: string;
-  device?: string;
-  since?: string;
-  until?: string;
-  limit?: string;
-  format?: string;
-  detail?: string;
-  resource?: string[];
-  force?: boolean;
-}
-
-function toCmd(vals: typeof values): CmdValues {
-  return vals as CmdValues;
-}
 
 // ---------------------------------------------------------------------------
 // Version / Help
@@ -201,7 +179,7 @@ if (!command || values.help) {
 // Command handlers
 // ---------------------------------------------------------------------------
 
-async function cmdLog(cmdArgs: string[], vals: CmdValues): Promise<void> {
+async function cmdLog(cmdArgs: string[], vals: typeof values): Promise<void> {
   const summary = cmdArgs[0];
   if (!summary) {
     console.error(red("Usage: joa log <summary> [options]"));
@@ -241,12 +219,32 @@ async function cmdLog(cmdArgs: string[], vals: CmdValues): Promise<void> {
   }
 }
 
-async function cmdQuery(vals: CmdValues): Promise<void> {
+async function cmdQuery(vals: typeof values): Promise<void> {
+  // Validate preset
+  const validPresets = ["catchup", "threads", "timeline", "decisions", "changes"];
+  if (vals.preset && !validPresets.includes(vals.preset)) {
+    console.error(red(`Invalid preset: ${vals.preset}. Valid presets: ${validPresets.join(", ")}`));
+    process.exit(1);
+  }
+
+  // Validate limit
+  let limit: number | undefined;
+  if (vals.limit) {
+    limit = Number.parseInt(vals.limit, 10);
+    if (Number.isNaN(limit) || limit <= 0) {
+      console.error(red("--limit must be a positive integer"));
+      process.exit(1);
+    }
+  }
+
+  // Normalize empty search
+  const search = vals.search?.trim() || undefined;
+
   const { config, readCtx } = await bootstrap();
   const result = query(
     {
       preset: vals.preset as PresetName | undefined,
-      search: vals.search,
+      search,
       category: vals.category,
       tags: vals.tag,
       thread_id: vals.thread,
@@ -255,7 +253,7 @@ async function cmdQuery(vals: CmdValues): Promise<void> {
       device: vals.device,
       since: vals.since,
       until: vals.until,
-      limit: vals.limit ? Number.parseInt(vals.limit, 10) : undefined,
+      limit,
       format: (vals.format as "md" | "json" | "compact") ?? "compact",
     },
     readCtx,
@@ -305,7 +303,7 @@ async function cmdRebuild(): Promise<void> {
   console.log(green(`Done. Indexed ${count} entries.`));
 }
 
-async function cmdExport(vals: CmdValues): Promise<void> {
+async function cmdExport(vals: typeof values): Promise<void> {
   const { config, readCtx } = await bootstrap();
   const result = query(
     {
@@ -313,7 +311,7 @@ async function cmdExport(vals: CmdValues): Promise<void> {
       tags: vals.tag,
       since: vals.since,
       until: vals.until,
-      limit: 1000,
+      limit: vals.limit ? Number.parseInt(vals.limit, 10) : 10000,
       format: "json",
     },
     readCtx,
@@ -353,42 +351,12 @@ async function cmdImport(cmdArgs: string[]): Promise<void> {
   }
 
   const { logCtx } = await bootstrap();
-  const countBefore = logCtx.db.countEntries({});
-  let parsedCount = 0;
-  let malformed = 0;
-
-  for (const line of lines) {
-    try {
-      const parsed = JSON.parse(line);
-      if (
-        typeof parsed !== "object" ||
-        !parsed ||
-        typeof parsed.id !== "string" ||
-        typeof parsed.summary !== "string"
-      ) {
-        console.error(yellow("Skipping invalid entry: missing required fields"));
-        malformed++;
-        continue;
-      }
-      const row = parsed as EntryRow;
-      const entry = deserializeEntry(row);
-      await appendEntry(entry, logCtx.journalsDir);
-      logCtx.db.writeEntry(entry);
-      parsedCount++;
-    } catch {
-      console.error(yellow(`Skipping malformed line: ${line.slice(0, 80)}`));
-      malformed++;
-    }
-  }
-
-  const countAfter = logCtx.db.countEntries({});
-  const imported = countAfter - countBefore;
-  const skipped = parsedCount - imported;
+  const result = await importEntries(lines, logCtx.db, logCtx.journalsDir);
 
   console.log(
-    green(`Imported ${imported} entries`) +
-      (skipped > 0 ? dim(` (${skipped} skipped as duplicates)`) : "") +
-      (malformed > 0 ? yellow(` (${malformed} malformed)`) : ""),
+    green(`Imported ${result.imported} entries`) +
+      (result.skipped > 0 ? dim(` (${result.skipped} skipped as duplicates)`) : "") +
+      (result.malformed > 0 ? yellow(` (${result.malformed} malformed)`) : ""),
   );
 }
 
@@ -570,6 +538,13 @@ async function cmdConfigSet(key: string | undefined, val: string | undefined): P
   const resolvedKey =
     key === "device" ? "defaults.device" : key === "agent" ? "defaults.agent" : key;
 
+  const validTopKeys = ["defaults", "db", "journals", "presets"];
+  const topKey = resolvedKey.split(".")[0];
+  if (topKey && !validTopKeys.includes(topKey)) {
+    console.error(red(`Unknown config key: ${key}. Valid keys: ${validTopKeys.join(", ")}`));
+    process.exit(1);
+  }
+
   // Parse value — detect JSON
   let parsed: unknown = val;
   if (
@@ -610,7 +585,7 @@ async function cmdConfigSet(key: string | undefined, val: string | undefined): P
 // Dispatch
 // ---------------------------------------------------------------------------
 
-const v = toCmd(values);
+const v = values;
 
 try {
   switch (command) {
@@ -673,6 +648,15 @@ try {
       process.exit(1);
   }
 } catch (err) {
+  if (err instanceof ValidationError) {
+    console.error(red(err.message));
+    process.exit(1);
+  }
+  if (err instanceof DatabaseError) {
+    console.error(red(`Database error: ${err.message}`));
+    console.error(dim("Try running: joa rebuild"));
+    process.exit(2);
+  }
   const message = err instanceof Error ? err.message : String(err);
   console.error(red(`Error: ${message}`));
   process.exit(1);

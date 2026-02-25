@@ -18,6 +18,13 @@ export type { JoaConfig, PresetConfig, PresetName } from "./config.ts";
 export type { ISOTimestamp } from "./time.ts";
 export type { JoaDb, QueryParams, ThreadSummaryRow } from "./db.ts";
 
+// Entry serialization
+export { serializeEntry } from "./entry.ts";
+
+// Import
+export { importEntries } from "./import.ts";
+export type { ImportResult } from "./import.ts";
+
 // Operations
 export { log } from "./log.ts";
 export { query } from "./query.ts";
@@ -38,3 +45,7 @@ export {
 
 // IDs (needed by MCP session management in 1B)
 export { sessionId, entryId, threadId } from "./ids.ts";
+
+// Bootstrap
+export { bootstrap } from "./bootstrap.ts";
+export type { BootstrapResult, BootstrapOptions } from "./bootstrap.ts";

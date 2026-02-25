@@ -1,16 +1,34 @@
+import { readFileSync } from "node:fs";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { bootstrap } from "../cli/bootstrap.ts";
-import { log, query, status } from "../core/index.ts";
+import { bootstrap, log, query, status } from "../core/index.ts";
 import type { PresetName } from "../core/index.ts";
 
+const pkg = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as {
+  version: string;
+};
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function textContent(text: string) {
+  return { content: [{ type: "text" as const, text }] };
+}
+
+function errorResponse(toolName: string, err: unknown) {
+  const message = err instanceof Error ? err.message : String(err);
+  console.error(`${toolName} error: ${message}`);
+  return { ...textContent(`Error: ${message}`), isError: true as const };
+}
+
 // Bootstrap once at server startup
-const { config, readCtx, logCtx, sid } = await bootstrap();
+const { config, readCtx, logCtx, sid } = await bootstrap({ agent: "mcp" });
 
 const server = new McpServer({
   name: "joa",
-  version: "0.1.0",
+  version: pkg.version,
 });
 
 // ---------------------------------------------------------------------------
@@ -54,26 +72,16 @@ server.registerTool(
         },
         logCtx,
       );
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: JSON.stringify({
-              entry_id: result.entry_id,
-              thread_id: result.thread_id,
-              status: result.status,
-              ...(result.warning ? { warning: result.warning } : {}),
-            }),
-          },
-        ],
-      };
+      return textContent(
+        JSON.stringify({
+          entry_id: result.entry_id,
+          thread_id: result.thread_id,
+          status: result.status,
+          ...(result.warning ? { warning: result.warning } : {}),
+        }),
+      );
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(`joa_log error: ${message}`);
-      return {
-        isError: true,
-        content: [{ type: "text" as const, text: `Error: ${message}` }],
-      };
+      return errorResponse("joa_log", err);
     }
   },
 );
@@ -132,16 +140,9 @@ server.registerTool(
         text += `\n\n_Showing ${result.entries.length} of ${result.total} entries_`;
       }
 
-      return {
-        content: [{ type: "text" as const, text }],
-      };
+      return textContent(text);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(`joa_query error: ${message}`);
-      return {
-        isError: true,
-        content: [{ type: "text" as const, text: `Error: ${message}` }],
-      };
+      return errorResponse("joa_query", err);
     }
   },
 );
@@ -160,16 +161,9 @@ server.registerTool(
   async () => {
     try {
       const s = status(readCtx, config, sid);
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify(s, null, 2) }],
-      };
+      return textContent(JSON.stringify(s, null, 2));
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(`joa_status error: ${message}`);
-      return {
-        isError: true,
-        content: [{ type: "text" as const, text: `Error: ${message}` }],
-      };
+      return errorResponse("joa_status", err);
     }
   },
 );

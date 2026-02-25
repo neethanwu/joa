@@ -1,189 +1,20 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { defaultConfig, loadConfig } from "../../src/core/config.ts";
-import type { LogContext, ReadContext } from "../../src/core/context.ts";
+import { defaultConfig } from "../../src/core/config.ts";
+import type { LogContext } from "../../src/core/context.ts";
 import { openDatabase } from "../../src/core/db.ts";
 import type { JoaDb } from "../../src/core/db.ts";
 import { deserializeEntry, serializeEntry } from "../../src/core/entry.ts";
-import { sessionId } from "../../src/core/ids.ts";
-import { appendEntry, listJournalFiles } from "../../src/core/journal.ts";
+import { appendEntry } from "../../src/core/journal.ts";
 import { log } from "../../src/core/log.ts";
 import { query } from "../../src/core/query.ts";
-import { status } from "../../src/core/status.ts";
-import { rebuildIndex } from "../../src/core/sync.ts";
-import { makeEntry } from "../core/helpers.ts";
-
-function makeLogCtx(db: JoaDb, journalsDir: string): LogContext {
-  return {
-    db,
-    journalsDir,
-    sessionId: sessionId(),
-    agent: "test-agent",
-    device: "test-device",
-    defaultTags: [],
-  };
-}
+import { makeEntry, makeLogCtx } from "../core/helpers.ts";
 
 // ---------------------------------------------------------------------------
 // CLI command handler integration tests
 // ---------------------------------------------------------------------------
-
-describe("CLI: log command", () => {
-  let db: JoaDb;
-  let tmp: string;
-  let ctx: LogContext;
-
-  beforeEach(() => {
-    db = openDatabase(":memory:");
-    tmp = mkdtempSync(join(tmpdir(), "joa-cli-test-"));
-    ctx = makeLogCtx(db, tmp);
-  });
-
-  afterEach(() => {
-    db.close();
-    rmSync(tmp, { recursive: true });
-  });
-
-  test("log creates entry with correct category", async () => {
-    const result = await log({ category: "decision", summary: "Chose Postgres" }, ctx);
-    expect(result.status).toBe("ok");
-    const rows = db.queryEntries({});
-    expect(rows[0]?.category).toBe("decision");
-  });
-
-  test("log with tags stores them", async () => {
-    await log({ category: "observation", summary: "test", tags: ["auth", "backend"] }, ctx);
-    const rows = db.queryEntries({});
-    const tags = JSON.parse(rows[0]?.tags ?? "[]") as string[];
-    expect(tags).toContain("auth");
-    expect(tags).toContain("backend");
-  });
-
-  test("log with detail stores JSON", async () => {
-    await log({ category: "decision", summary: "test", detail: { reasoning: "performance" } }, ctx);
-    const rows = db.queryEntries({});
-    const detail = JSON.parse(rows[0]?.detail ?? "{}") as Record<string, unknown>;
-    expect(detail.reasoning).toBe("performance");
-  });
-
-  test("log with thread new generates thread ID", async () => {
-    const result = await log({ category: "decision", summary: "test", thread_id: "new" }, ctx);
-    expect(result.thread_id).toMatch(/^th_/);
-  });
-});
-
-describe("CLI: query command", () => {
-  let db: JoaDb;
-  let tmp: string;
-  let ctx: LogContext;
-  const config = defaultConfig();
-
-  beforeEach(async () => {
-    db = openDatabase(":memory:");
-    tmp = mkdtempSync(join(tmpdir(), "joa-cli-query-test-"));
-    ctx = makeLogCtx(db, tmp);
-    // Seed entries
-    await log({ category: "decision", summary: "Chose Postgres" }, ctx);
-    await log({ category: "file change", summary: "Refactored auth" }, ctx);
-    await log({ category: "observation", summary: "Performance looks good" }, ctx);
-  });
-
-  afterEach(() => {
-    db.close();
-    rmSync(tmp, { recursive: true });
-  });
-
-  test("query returns all entries by default", () => {
-    const result = query({}, { db }, config);
-    expect(result.entries.length).toBe(3);
-  });
-
-  test("query with preset decisions filters by category", () => {
-    const result = query({ preset: "decisions" }, { db }, config);
-    expect(result.entries.length).toBe(1);
-    expect(result.entries[0]?.category).toBe("decision");
-  });
-
-  test("query with format compact returns compact output", () => {
-    const result = query({ format: "compact" }, { db }, config);
-    expect(result.format).toBe("compact");
-    expect(result.rendered).toContain("decision:");
-    expect(result.rendered).toContain("file change:");
-  });
-
-  test("query with format json returns valid JSON", () => {
-    const result = query({ format: "json" }, { db }, config);
-    const parsed = JSON.parse(result.rendered);
-    expect(Array.isArray(parsed)).toBe(true);
-    expect(parsed.length).toBe(3);
-  });
-
-  test("query with limit restricts results", () => {
-    const result = query({ limit: 1 }, { db }, config);
-    expect(result.entries.length).toBe(1);
-    expect(result.total).toBe(3);
-  });
-
-  test("search finds entries by text", () => {
-    const result = query({ search: "Postgres" }, { db }, config);
-    expect(result.entries.length).toBe(1);
-    expect(result.entries[0]?.summary).toBe("Chose Postgres");
-  });
-});
-
-describe("CLI: status command", () => {
-  let db: JoaDb;
-  let tmp: string;
-
-  beforeEach(async () => {
-    db = openDatabase(":memory:");
-    tmp = mkdtempSync(join(tmpdir(), "joa-cli-status-test-"));
-    const ctx = makeLogCtx(db, tmp);
-    await log({ category: "decision", summary: "test" }, ctx);
-  });
-
-  afterEach(() => {
-    db.close();
-    rmSync(tmp, { recursive: true });
-  });
-
-  test("status returns entry count and categories", () => {
-    const config = loadConfig(tmp);
-    const s = status({ db }, config, sessionId());
-    expect(s.total_entries).toBe(1);
-    expect(s.entries_by_category.decision).toBe(1);
-    expect(s.db_healthy).toBe(true);
-  });
-});
-
-describe("CLI: rebuild command", () => {
-  let db: JoaDb;
-  let tmp: string;
-
-  beforeEach(async () => {
-    db = openDatabase(":memory:");
-    tmp = mkdtempSync(join(tmpdir(), "joa-cli-rebuild-test-"));
-    const ctx = makeLogCtx(db, tmp);
-    await log({ category: "decision", summary: "entry 1" }, ctx);
-    await log({ category: "observation", summary: "entry 2" }, ctx);
-  });
-
-  afterEach(() => {
-    db.close();
-    rmSync(tmp, { recursive: true });
-  });
-
-  test("rebuild reconstructs index from JSONL", async () => {
-    // Clear DB
-    db.clearEntries();
-    expect(db.countEntries({})).toBe(0);
-    // Rebuild
-    await rebuildIndex(db, tmp);
-    expect(db.countEntries({})).toBe(2);
-  });
-});
 
 describe("CLI: export/import", () => {
   let db: JoaDb;

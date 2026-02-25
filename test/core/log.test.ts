@@ -9,17 +9,7 @@ import { InvalidThreadId, JournalWriteError } from "../../src/core/errors.ts";
 import { isEntryId, isThreadId, sessionId } from "../../src/core/ids.ts";
 import { listJournalFiles, readJournalFile } from "../../src/core/journal.ts";
 import { log } from "../../src/core/log.ts";
-
-function makeCtx(db: JoaDb, journalsDir: string): LogContext {
-  return {
-    db,
-    journalsDir,
-    sessionId: sessionId(),
-    agent: "test-agent",
-    device: "test-device",
-    defaultTags: ["default-tag"],
-  };
-}
+import { makeLogCtx } from "./helpers.ts";
 
 describe("log", () => {
   let db: JoaDb;
@@ -29,7 +19,7 @@ describe("log", () => {
   beforeEach(() => {
     db = openDatabase(":memory:");
     tmp = mkdtempSync(join(tmpdir(), "joa-log-test-"));
-    ctx = makeCtx(db, tmp);
+    ctx = makeLogCtx(db, tmp, { defaultTags: ["default-tag"] });
   });
 
   afterEach(() => {
@@ -114,7 +104,7 @@ describe("log", () => {
         throw new Error("SQLite failed");
       },
     };
-    const failCtx = makeCtx(failDb, tmp);
+    const failCtx = makeLogCtx(failDb, tmp, { defaultTags: ["default-tag"] });
     const result = await log({ category: "decision", summary: "test" }, failCtx);
     expect(result.status).toBe("ok");
     expect(result.warning).toBe("index_sync_failed");
@@ -125,7 +115,7 @@ describe("log", () => {
   });
 
   test("JSONL failure throws JournalWriteError", async () => {
-    const badCtx = makeCtx(db, "/nonexistent/readonly/path");
+    const badCtx = makeLogCtx(db, "/nonexistent/readonly/path", { defaultTags: ["default-tag"] });
     await expect(log({ category: "decision", summary: "test" }, badCtx)).rejects.toThrow(
       JournalWriteError,
     );

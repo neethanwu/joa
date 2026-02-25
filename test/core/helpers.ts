@@ -1,3 +1,5 @@
+import type { LogContext } from "../../src/core/context.ts";
+import type { JoaDb } from "../../src/core/db.ts";
 import type { Entry } from "../../src/core/entry.ts";
 import { entryId, sessionId } from "../../src/core/ids.ts";
 
@@ -15,6 +17,22 @@ export function makeEntry(overrides?: Partial<Entry>): Entry {
     tags: [],
     detail: {},
     annotations: {},
+    ...overrides,
+  };
+}
+
+export function makeLogCtx(
+  db: JoaDb,
+  journalsDir: string,
+  overrides?: Partial<LogContext>,
+): LogContext {
+  return {
+    db,
+    journalsDir,
+    sessionId: sessionId(),
+    agent: "test-agent",
+    device: "test-device",
+    defaultTags: [],
     ...overrides,
   };
 }

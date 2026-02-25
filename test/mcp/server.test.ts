@@ -8,23 +8,13 @@ import { openDatabase } from "../../src/core/db.ts";
 import type { JoaDb } from "../../src/core/db.ts";
 import { sessionId } from "../../src/core/ids.ts";
 import { log, query, status } from "../../src/core/index.ts";
+import { makeLogCtx } from "../core/helpers.ts";
 
 /**
  * MCP server tests — we test the core functions that the MCP tool handlers delegate to,
  * since the actual MCP server requires a stdio transport. This validates that
  * the tool handler logic (call core, format response, handle errors) works correctly.
  */
-
-function makeLogCtx(db: JoaDb, journalsDir: string): LogContext {
-  return {
-    db,
-    journalsDir,
-    sessionId: sessionId(),
-    agent: "mcp-test",
-    device: "test-device",
-    defaultTags: [],
-  };
-}
 
 describe("MCP: joa_log tool", () => {
   let db: JoaDb;
@@ -34,7 +24,7 @@ describe("MCP: joa_log tool", () => {
   beforeEach(() => {
     db = openDatabase(":memory:");
     tmp = mkdtempSync(join(tmpdir(), "joa-mcp-test-"));
-    logCtx = makeLogCtx(db, tmp);
+    logCtx = makeLogCtx(db, tmp, { agent: "mcp-test" });
   });
 
   afterEach(() => {
@@ -96,7 +86,7 @@ describe("MCP: joa_query tool", () => {
   beforeEach(async () => {
     db = openDatabase(":memory:");
     tmp = mkdtempSync(join(tmpdir(), "joa-mcp-query-test-"));
-    const ctx = makeLogCtx(db, tmp);
+    const ctx = makeLogCtx(db, tmp, { agent: "mcp-test" });
     await log({ category: "decision", summary: "Chose Postgres" }, ctx);
     await log({ category: "observation", summary: "Latency is low" }, ctx);
   });
@@ -147,7 +137,7 @@ describe("MCP: joa_status tool", () => {
   beforeEach(async () => {
     db = openDatabase(":memory:");
     tmp = mkdtempSync(join(tmpdir(), "joa-mcp-status-test-"));
-    const ctx = makeLogCtx(db, tmp);
+    const ctx = makeLogCtx(db, tmp, { agent: "mcp-test" });
     await log({ category: "decision", summary: "test" }, ctx);
   });
 
