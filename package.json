@@ -29,7 +29,7 @@
   ],
   "scripts": {
     "test": "bun test",
-    "build": "tsc -p tsconfig.build.json && printf '#!/usr/bin/env node\\n' | cat - dist/cli/main.js > dist/cli/main.tmp && mv dist/cli/main.tmp dist/cli/main.js && chmod +x dist/cli/main.js",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && test -s dist/cli/main.js && printf '#!/usr/bin/env node\\n' | cat - dist/cli/main.js > dist/cli/main.tmp && mv dist/cli/main.tmp dist/cli/main.js && chmod +x dist/cli/main.js",
     "prepublishOnly": "bun run build",
     "lint": "bunx biome check .",
     "lint:fix": "bunx biome check --write .",

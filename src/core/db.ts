@@ -4,18 +4,34 @@ import { serializeEntry } from "./entry.ts";
 import { DatabaseError } from "./errors.ts";
 import type { ISOTimestamp } from "./time.ts";
 
+// Narrow interface covering the bun:sqlite / better-sqlite3 surface we use.
+interface SqliteStatement {
+  get(...params: BindValue[]): unknown;
+  all(...params: BindValue[]): unknown[];
+  run(...params: BindValue[]): { changes: number };
+}
+
+interface SqliteDatabase {
+  exec(sql: string): void;
+  prepare(sql: string): SqliteStatement;
+  transaction<T>(fn: () => T): () => T;
+  close(): void;
+}
+
+interface SqliteDatabaseCtor {
+  new (path: string): SqliteDatabase;
+}
+
 // Runtime shim: bun:sqlite under Bun, better-sqlite3 under Node.js.
 // String concatenation prevents tsc/Node from resolving the bun: specifier.
 const isBun = typeof globalThis.Bun !== "undefined";
-/** @type {any} — constructor type varies by runtime (bun:sqlite vs better-sqlite3) */
-// biome-ignore lint/suspicious/noExplicitAny: Database constructor differs per runtime
-let DatabaseCtor: any;
+let DatabaseCtor: SqliteDatabaseCtor;
 if (isBun) {
   const mod = await import("bun:" + "sqlite");
-  DatabaseCtor = mod.Database;
+  DatabaseCtor = mod.Database as SqliteDatabaseCtor;
 } else {
   const mod = await import("better-sqlite3");
-  DatabaseCtor = mod.default;
+  DatabaseCtor = mod.default as SqliteDatabaseCtor;
 }
 
 export interface QueryParams {

@@ -336,10 +336,20 @@ async function cmdImport(cmdArgs: string[]): Promise<void> {
     process.exit(1);
   }
 
+  const MAX_STDIN_BYTES = 100 * 1024 * 1024; // 100 MB
+
   let content: string;
   if (file === "-") {
     const chunks: Buffer[] = [];
-    for await (const chunk of process.stdin) chunks.push(chunk);
+    let totalBytes = 0;
+    for await (const chunk of process.stdin) {
+      totalBytes += chunk.length;
+      if (totalBytes > MAX_STDIN_BYTES) {
+        console.error(red(`Stdin exceeds ${MAX_STDIN_BYTES / 1024 / 1024} MB limit`));
+        process.exit(1);
+      }
+      chunks.push(chunk);
+    }
     content = Buffer.concat(chunks).toString("utf8");
   } else {
     try {
