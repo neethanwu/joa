@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
-import { cleanupJoaHome, makeJoaHome, runJoa } from "./cli-helpers.ts";
+import { makeJoaHome, runJoa } from "./cli-helpers.ts";
 
 /**
  * CLI smoke tests — every user-facing command is run end-to-end via child process.
@@ -22,7 +22,7 @@ beforeAll(async () => {
 });
 
 afterAll(() => {
-  cleanupJoaHome(home);
+  rmSync(home, { recursive: true });
 });
 
 describe("CLI smoke: metadata", () => {

@@ -32,6 +32,19 @@ export interface QueryOutput {
   format: "md" | "json" | "compact";
 }
 
+/** Truncate to at most `max` Unicode codepoints without splitting surrogate pairs. */
+function unicodeTruncate(s: string, max: number): string {
+  if (s.length <= max) return s;
+  let count = 0;
+  let i = 0;
+  while (i < s.length && count < max) {
+    const code = s.codePointAt(i) ?? 0;
+    i += code > 0xffff ? 2 : 1;
+    count++;
+  }
+  return s.slice(0, i);
+}
+
 /** Escape FTS5 special characters by wrapping in double quotes. */
 function escapeFts(query: string): string {
   // Strip null bytes — they cause "unterminated string" in FTS5
@@ -99,7 +112,7 @@ export function query(input: QueryInput, ctx: ReadContext, config: JoaConfig): Q
 
   // FTS search — escape special chars, truncate long queries (Unicode-safe)
   if (input.search) {
-    const trimmed = [...input.search].slice(0, MAX_SEARCH_LENGTH).join("");
+    const trimmed = unicodeTruncate(input.search, MAX_SEARCH_LENGTH);
     params.search = escapeFts(trimmed);
   }
 

@@ -66,7 +66,7 @@ describe("MCP: joa_log tool", () => {
     // Simulate what the MCP handler does on error
     try {
       await log({ category: "", summary: "test" }, logCtx);
-      expect(true).toBe(false); // Should not reach here
+      throw new Error("Expected log to throw");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       const errorResponse = {
@@ -274,65 +274,13 @@ describe("MCP: input validation", () => {
     ).rejects.toThrow(InvalidThreadId);
   });
 
-  test("query with invalid preset throws", () => {
+  test("query with unrecognized preset falls through without error", () => {
     const config = defaultConfig();
     // The query function accesses presets via config lookup — an invalid preset
     // does not throw but simply returns no preset-specific filters
     const result = query({ preset: "nonexistent" as "catchup" }, { db }, config);
     // It should still work without crashing — returns all entries
     expect(result).toBeDefined();
-  });
-});
-
-describe("MCP: error wrapping", () => {
-  let db: JoaDb;
-  let tmp: string;
-  let logCtx: LogContext;
-
-  beforeEach(async () => {
-    db = await openDatabase(":memory:");
-    tmp = mkdtempSync(join(tmpdir(), "joa-mcp-error-wrap-test-"));
-    logCtx = makeLogCtx(db, tmp, { agent: "mcp-test" });
-  });
-
-  afterEach(() => {
-    db.close();
-    rmSync(tmp, { recursive: true });
-  });
-
-  test("log error can be wrapped as isError response", async () => {
-    try {
-      await log({ category: "", summary: "test" }, logCtx);
-      expect(true).toBe(false); // Should not reach
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      const response = {
-        content: [{ type: "text" as const, text: `Error: ${message}` }],
-        isError: true as const,
-      };
-      expect(response.isError).toBe(true);
-      expect(response.content[0]!.text).toContain("category must not be empty");
-    }
-  });
-
-  test("query error can be wrapped as isError response", () => {
-    // Force a query error by closing the DB, then querying
-    db.close();
-    try {
-      const config = defaultConfig();
-      query({}, { db }, config);
-      expect(true).toBe(false); // Should not reach
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      const response = {
-        content: [{ type: "text" as const, text: `Error: ${message}` }],
-        isError: true as const,
-      };
-      expect(response.isError).toBe(true);
-      expect(response.content[0]!.text).toContain("Error:");
-    }
-    // Reopen for afterEach cleanup
-    // afterEach will call close() on the already-closed db — that's fine
   });
 });
 

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { cleanupJoaHome, makeJoaHome, runJoa } from "./cli-helpers.ts";
+import { makeJoaHome, runJoa } from "./cli-helpers.ts";
 
 /**
  * CLI error dispatch tests — verifies that different error types map to
@@ -20,7 +20,7 @@ describe("CLI dispatch: catch block errors", () => {
   });
 
   afterEach(() => {
-    cleanupJoaHome(home);
+    rmSync(home, { recursive: true });
   });
 
   test("ValidationError (empty summary) → exit 1", async () => {
@@ -78,7 +78,7 @@ describe("CLI dispatch: direct exit paths", () => {
   });
 
   afterEach(() => {
-    cleanupJoaHome(home);
+    rmSync(home, { recursive: true });
   });
 
   test("log with no summary → exit 1 with usage", async () => {

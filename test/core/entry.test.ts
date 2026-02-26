@@ -1,10 +1,9 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultConfig } from "../../src/core/config.ts";
 import { openDatabase } from "../../src/core/db.ts";
-import type { JoaDb } from "../../src/core/db.ts";
 import {
   deserializeEntry,
   normalizeCategory,

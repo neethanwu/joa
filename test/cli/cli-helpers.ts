@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -17,11 +17,10 @@ const CLI_ENTRY = resolve(import.meta.dir, "../../src/cli/main.ts");
  */
 export async function runJoa(
   args: string[],
-  opts?: { env?: Record<string, string>; home?: string },
+  opts: { env?: Record<string, string>; home: string },
 ): Promise<CliResult> {
-  const home = opts?.home ?? makeJoaHome();
   const proc = Bun.spawn(["bun", CLI_ENTRY, ...args], {
-    env: { ...process.env, HOME: home, ...opts?.env },
+    env: { ...process.env, HOME: opts.home, ...opts.env },
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -40,8 +39,4 @@ export function makeJoaHome(): string {
   const home = mkdtempSync(join(tmpdir(), "joa-home-test-"));
   mkdirSync(join(home, ".joa", "journals"), { recursive: true });
   return home;
-}
-
-export function cleanupJoaHome(home: string): void {
-  rmSync(home, { recursive: true });
 }
