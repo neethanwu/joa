@@ -4,7 +4,9 @@ import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 import yaml from "js-yaml";
 import {
+  ConfigError,
   DatabaseError,
+  JournalWriteError,
   ValidationError,
   bootstrap,
   importEntries,
@@ -809,6 +811,16 @@ try {
     console.error(red(`Database error: ${err.message}`));
     console.error(dim("Try running: joa rebuild"));
     process.exit(2);
+  }
+  if (err instanceof JournalWriteError) {
+    console.error(red(`Write error: ${err.message}`));
+    console.error(dim("Check disk space and file permissions for your journals directory."));
+    process.exit(3);
+  }
+  if (err instanceof ConfigError) {
+    console.error(red(`Config error: ${err.message}`));
+    console.error(dim("Check your config file: ~/.joa/config.yaml or .joa.yaml"));
+    process.exit(4);
   }
   const message = err instanceof Error ? err.message : String(err);
   console.error(red(`Error: ${message}`));

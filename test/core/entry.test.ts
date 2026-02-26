@@ -1,4 +1,10 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { defaultConfig } from "../../src/core/config.ts";
+import { openDatabase } from "../../src/core/db.ts";
+import type { JoaDb } from "../../src/core/db.ts";
 import {
   deserializeEntry,
   normalizeCategory,
@@ -7,7 +13,9 @@ import {
 } from "../../src/core/entry.ts";
 import { InvalidThreadId, ValidationError } from "../../src/core/errors.ts";
 import { threadId } from "../../src/core/ids.ts";
-import { makeEntry } from "./helpers.ts";
+import { log } from "../../src/core/log.ts";
+import { query } from "../../src/core/query.ts";
+import { makeEntry, makeLogCtx } from "./helpers.ts";
 
 describe("normalizeCategory", () => {
   test('"Decision" → "decision"', () => {
@@ -93,5 +101,115 @@ describe("validateEntryInput", () => {
       validateEntryInput({ category: "decision", summary: "ok", thread_id: null }),
     ).not.toThrow();
     expect(() => validateEntryInput({ category: "decision", summary: "ok" })).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tag validation boundary (Section 1.5)
+// ---------------------------------------------------------------------------
+
+describe("tag validation boundary", () => {
+  // --- Forbidden characters ---
+
+  test('rejects tag containing "', () => {
+    expect(() =>
+      validateEntryInput({ category: "decision", summary: "ok", tags: ['scope:"admin"'] }),
+    ).toThrow(ValidationError);
+  });
+
+  test("rejects tag containing \\", () => {
+    expect(() =>
+      validateEntryInput({ category: "decision", summary: "ok", tags: ["path\\to\\file"] }),
+    ).toThrow(ValidationError);
+  });
+
+  test('rejects tag containing both " and \\', () => {
+    expect(() =>
+      validateEntryInput({ category: "decision", summary: "ok", tags: ['"escaped\\"'] }),
+    ).toThrow(ValidationError);
+  });
+
+  test('rejects tag that is just "', () => {
+    expect(() => validateEntryInput({ category: "decision", summary: "ok", tags: ['"'] })).toThrow(
+      ValidationError,
+    );
+  });
+
+  test("rejects tag that is just \\", () => {
+    expect(() => validateEntryInput({ category: "decision", summary: "ok", tags: ["\\"] })).toThrow(
+      ValidationError,
+    );
+  });
+
+  // --- Empty / whitespace ---
+
+  test("rejects empty string tag", () => {
+    expect(() => validateEntryInput({ category: "decision", summary: "ok", tags: [""] })).toThrow(
+      "tag must not be empty",
+    );
+  });
+
+  test("rejects whitespace-only tag", () => {
+    expect(() =>
+      validateEntryInput({ category: "decision", summary: "ok", tags: ["   "] }),
+    ).toThrow("tag must not be empty");
+  });
+
+  // --- Allowed characters ---
+
+  test("accepts tags with colons", () => {
+    expect(() =>
+      validateEntryInput({ category: "decision", summary: "ok", tags: ["project:api"] }),
+    ).not.toThrow();
+  });
+
+  test("accepts tags with slashes", () => {
+    expect(() =>
+      validateEntryInput({ category: "decision", summary: "ok", tags: ["scope/security"] }),
+    ).not.toThrow();
+  });
+
+  test("accepts tags with @ sign", () => {
+    expect(() =>
+      validateEntryInput({ category: "decision", summary: "ok", tags: ["@neethan"] }),
+    ).not.toThrow();
+  });
+
+  test("accepts tags with spaces", () => {
+    expect(() =>
+      validateEntryInput({ category: "decision", summary: "ok", tags: ["my tag"] }),
+    ).not.toThrow();
+  });
+
+  test("accepts tags with Unicode", () => {
+    expect(() =>
+      validateEntryInput({ category: "decision", summary: "ok", tags: ["项目:api"] }),
+    ).not.toThrow();
+  });
+
+  test("accepts long tags (256 chars)", () => {
+    expect(() =>
+      validateEntryInput({ category: "decision", summary: "ok", tags: ["a".repeat(256)] }),
+    ).not.toThrow();
+  });
+
+  // --- Roundtrip ---
+
+  test("tags with special allowed chars survive roundtrip", async () => {
+    const db = await openDatabase(":memory:");
+    const tmp = mkdtempSync(join(tmpdir(), "joa-tag-roundtrip-"));
+    try {
+      const ctx = makeLogCtx(db, tmp);
+      const tags = ["project:api", "scope/security", "🏷️"];
+      await log({ category: "observation", summary: "tag roundtrip test", tags }, ctx);
+
+      const config = defaultConfig();
+      const result = query({ format: "json" }, { db }, config);
+      expect(result.entries.length).toBe(1);
+      expect(result.entries[0]!.tags).toEqual(tags);
+    } finally {
+      db.close();
+      rmSync(tmp, { recursive: true });
+    }
   });
 });

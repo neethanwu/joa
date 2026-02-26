@@ -173,3 +173,113 @@ describe("query", () => {
     expect(result.rendered).toBe("No entries found.");
   });
 });
+
+// ---------------------------------------------------------------------------
+// FTS5 edge cases (Section 1.4)
+// ---------------------------------------------------------------------------
+
+describe("FTS5 edge cases", () => {
+  let db: JoaDb;
+  let ctx: ReadContext;
+  const config = defaultConfig();
+
+  beforeEach(async () => {
+    db = await openDatabase(":memory:");
+    ctx = { db };
+    // Seed entries with known summaries
+    db.writeEntry(makeEntry({ summary: "auth middleware added" }));
+    db.writeEntry(makeEntry({ summary: 'user said "hello world"' }));
+    db.writeEntry(makeEntry({ summary: "fixed bug in parser (v2)" }));
+    db.writeEntry(makeEntry({ summary: "response: 200 OK" }));
+    db.writeEntry(makeEntry({ summary: "deployed to staging" }));
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  // --- FTS5 operators treated as literal text ---
+
+  test("search with AND operator does not crash", () => {
+    expect(() => query({ search: "auth AND middleware" }, ctx, config)).not.toThrow();
+  });
+
+  test("search with OR operator does not crash", () => {
+    expect(() => query({ search: "auth OR bug" }, ctx, config)).not.toThrow();
+  });
+
+  test("search with NOT operator does not crash", () => {
+    expect(() => query({ search: "NOT auth" }, ctx, config)).not.toThrow();
+  });
+
+  test("search with NEAR operator does not crash", () => {
+    expect(() => query({ search: "NEAR auth" }, ctx, config)).not.toThrow();
+  });
+
+  // --- Special characters ---
+
+  test("search with double quotes does not crash", () => {
+    expect(() => query({ search: 'he said "hello"' }, ctx, config)).not.toThrow();
+  });
+
+  test("search with asterisk does not crash", () => {
+    expect(() => query({ search: "auth*" }, ctx, config)).not.toThrow();
+  });
+
+  test("search with parentheses does not crash", () => {
+    expect(() => query({ search: "(auth)" }, ctx, config)).not.toThrow();
+  });
+
+  test("search with hyphen does not crash", () => {
+    expect(() => query({ search: "better-sqlite3" }, ctx, config)).not.toThrow();
+  });
+
+  test("search with colon (column filter syntax) does not crash", () => {
+    expect(() => query({ search: "summary:token" }, ctx, config)).not.toThrow();
+  });
+
+  test("search with plus does not crash", () => {
+    expect(() => query({ search: "+auth" }, ctx, config)).not.toThrow();
+  });
+
+  test("search with caret does not crash", () => {
+    expect(() => query({ search: "^boost" }, ctx, config)).not.toThrow();
+  });
+
+  // --- Unicode ---
+
+  test("search with CJK characters does not crash", () => {
+    expect(() => query({ search: "认证中间件" }, ctx, config)).not.toThrow();
+  });
+
+  test("search with emoji does not crash", () => {
+    expect(() => query({ search: "deployed 🚀" }, ctx, config)).not.toThrow();
+  });
+
+  test("search with diacritics does not crash", () => {
+    expect(() => query({ search: "café" }, ctx, config)).not.toThrow();
+  });
+
+  // --- Edge cases ---
+
+  test("empty search string does not crash", () => {
+    expect(() => query({ search: "" }, ctx, config)).not.toThrow();
+  });
+
+  test("whitespace-only search string does not crash", () => {
+    expect(() => query({ search: "   " }, ctx, config)).not.toThrow();
+  });
+
+  test("search with null bytes does not crash", () => {
+    expect(() => query({ search: "auth\x00middleware" }, ctx, config)).not.toThrow();
+  });
+
+  test("search with newlines does not crash", () => {
+    expect(() => query({ search: "auth\nmiddleware" }, ctx, config)).not.toThrow();
+  });
+
+  test("500-char boundary with emoji does not crash", () => {
+    const longSearch = `${"a".repeat(499)}🚀`;
+    expect(() => query({ search: longSearch }, ctx, config)).not.toThrow();
+  });
+});

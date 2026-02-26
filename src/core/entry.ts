@@ -117,6 +117,9 @@ export function validateEntryInput(input: EntryInput): void {
       if (typeof tag !== "string") {
         throw new ValidationError("tags must be strings");
       }
+      if (tag.trim().length === 0) {
+        throw new ValidationError("tag must not be empty");
+      }
       if (tag.includes('"') || tag.includes("\\")) {
         throw new ValidationError('tag must not contain " or \\');
       }

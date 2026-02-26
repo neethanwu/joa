@@ -34,7 +34,9 @@ export interface QueryOutput {
 
 /** Escape FTS5 special characters by wrapping in double quotes. */
 function escapeFts(query: string): string {
-  return `"${query.replace(/"/g, '""')}"`;
+  // Strip null bytes — they cause "unterminated string" in FTS5
+  const clean = query.replace(/\0/g, "");
+  return `"${clean.replace(/"/g, '""')}"`;
 }
 
 function formatThreadSummary(threads: ThreadSummaryRow[]): string {
@@ -95,9 +97,9 @@ export function query(input: QueryInput, ctx: ReadContext, config: JoaConfig): Q
   if (input.limit !== undefined) params.limit = input.limit;
   params.limit = Math.min(params.limit ?? 50, MAX_LIMIT);
 
-  // FTS search — escape special chars, truncate long queries
+  // FTS search — escape special chars, truncate long queries (Unicode-safe)
   if (input.search) {
-    const trimmed = input.search.slice(0, MAX_SEARCH_LENGTH);
+    const trimmed = [...input.search].slice(0, MAX_SEARCH_LENGTH).join("");
     params.search = escapeFts(trimmed);
   }
 
