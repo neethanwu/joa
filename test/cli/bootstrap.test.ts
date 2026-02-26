@@ -2,7 +2,47 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { validateAgentName } from "../../src/core/bootstrap.ts";
 import { openDatabase } from "../../src/core/db.ts";
+import { ValidationError } from "../../src/core/errors.ts";
+
+describe("validateAgentName", () => {
+  test("accepts valid names", () => {
+    expect(() => validateAgentName("claude-code")).not.toThrow();
+    expect(() => validateAgentName("cursor")).not.toThrow();
+    expect(() => validateAgentName("my_agent_1")).not.toThrow();
+    expect(() => validateAgentName("a")).not.toThrow();
+    expect(() => validateAgentName("A")).not.toThrow();
+    expect(() => validateAgentName("agent-123_test")).not.toThrow();
+  });
+
+  test("rejects empty string", () => {
+    expect(() => validateAgentName("")).toThrow(ValidationError);
+    expect(() => validateAgentName("")).toThrow(/1-64 characters/);
+  });
+
+  test("rejects names exceeding 64 characters", () => {
+    const long = "a".repeat(65);
+    expect(() => validateAgentName(long)).toThrow(ValidationError);
+    expect(() => validateAgentName(long)).toThrow(/1-64 characters/);
+  });
+
+  test("accepts names at the 64-character boundary", () => {
+    expect(() => validateAgentName("a".repeat(64))).not.toThrow();
+  });
+
+  test("rejects names with special characters", () => {
+    const invalid = ["agent name", "agent.name", "agent@name", "agent/name", "agent!"];
+    for (const name of invalid) {
+      expect(() => validateAgentName(name)).toThrow(ValidationError);
+      expect(() => validateAgentName(name)).toThrow(/alphanumeric/);
+    }
+  });
+
+  test("rejects names with unicode characters", () => {
+    expect(() => validateAgentName("agenténame")).toThrow(ValidationError);
+  });
+});
 
 describe("bootstrap", () => {
   let tmp: string;
