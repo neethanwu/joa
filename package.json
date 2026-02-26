@@ -5,11 +5,32 @@
   "description": "Journal of Agents — persistent activity journal for AI agents",
   "main": "dist/core/index.js",
   "bin": {
-    "joa": "src/cli/main.ts"
+    "joa": "dist/cli/main.js"
   },
+  "files": ["dist/"],
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neethanwu/joa.git"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "journal",
+    "mcp",
+    "memory",
+    "claude",
+    "cursor",
+    "llm",
+    "activity-log"
+  ],
   "scripts": {
     "test": "bun test",
-    "build": "bun build src/core/index.ts --outdir dist/core --target bun",
+    "build": "tsc -p tsconfig.build.json && printf '#!/usr/bin/env node\\n' | cat - dist/cli/main.js > dist/cli/main.tmp && mv dist/cli/main.tmp dist/cli/main.js && chmod +x dist/cli/main.js",
+    "prepublishOnly": "bun run build",
     "lint": "bunx biome check .",
     "lint:fix": "bunx biome check --write .",
     "typecheck": "bunx tsc --noEmit"

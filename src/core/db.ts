@@ -320,9 +320,11 @@ export function openDatabase(dbPath: string): JoaDb {
 
     isHealthy(): boolean {
       try {
-        const row = db.prepare("PRAGMA integrity_check").get() as {
-          integrity_check: string;
-        } | undefined;
+        const row = db.prepare("PRAGMA integrity_check").get() as
+          | {
+              integrity_check: string;
+            }
+          | undefined;
         return row?.integrity_check === "ok";
       } catch {
         return false;
