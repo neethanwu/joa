@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -339,7 +338,9 @@ async function cmdImport(cmdArgs: string[]): Promise<void> {
 
   let content: string;
   if (file === "-") {
-    content = await Bun.stdin.text();
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) chunks.push(chunk);
+    content = Buffer.concat(chunks).toString("utf8");
   } else {
     try {
       content = readFileSync(file, "utf8");

@@ -1,9 +1,22 @@
-import { Database } from "bun:sqlite";
 import { statSync } from "node:fs";
 import type { Entry, EntryRow } from "./entry.ts";
 import { serializeEntry } from "./entry.ts";
 import { DatabaseError } from "./errors.ts";
 import type { ISOTimestamp } from "./time.ts";
+
+// Runtime shim: bun:sqlite under Bun, better-sqlite3 under Node.js.
+// String concatenation prevents tsc/Node from resolving the bun: specifier.
+const isBun = typeof globalThis.Bun !== "undefined";
+/** @type {any} — constructor type varies by runtime (bun:sqlite vs better-sqlite3) */
+// biome-ignore lint/suspicious/noExplicitAny: Database constructor differs per runtime
+let DatabaseCtor: any;
+if (isBun) {
+  const mod = await import("bun:" + "sqlite");
+  DatabaseCtor = mod.Database;
+} else {
+  const mod = await import("better-sqlite3");
+  DatabaseCtor = mod.default;
+}
 
 export interface QueryParams {
   thread_id?: string;
@@ -27,7 +40,7 @@ export interface ThreadSummaryRow {
   agents: string;
 }
 
-/** Narrow database interface — decouples operation layer from bun:sqlite. */
+/** Narrow database interface — decouples operation layer from SQLite driver. */
 export interface JoaDb {
   writeEntry(entry: Entry): void;
   writeEntries(entries: Entry[]): void;
@@ -154,7 +167,7 @@ function buildWhereClause(params: QueryParams): { sql: string; values: BindValue
 
 /** Opens and initializes the joa SQLite database. Returns a JoaDb instance. */
 export function openDatabase(dbPath: string): JoaDb {
-  const db = new Database(dbPath);
+  const db = new DatabaseCtor(dbPath);
 
   db.exec("PRAGMA journal_mode = WAL;");
   db.exec("PRAGMA synchronous = NORMAL;");
@@ -261,7 +274,7 @@ export function openDatabase(dbPath: string): JoaDb {
     countEntries(params: QueryParams): number {
       const { sql: where, values } = buildWhereClause(params);
       const query = `SELECT COUNT(*) as cnt FROM entries e ${where}`;
-      const row = db.prepare(query).get(...values) as { cnt: number } | null;
+      const row = db.prepare(query).get(...values) as { cnt: number } | undefined;
       return row?.cnt ?? 0;
     },
 
@@ -279,12 +292,12 @@ export function openDatabase(dbPath: string): JoaDb {
     },
 
     getEntryTimestampRange(): { oldest: string | null; newest: string | null } {
-      const row = tsRange.get() as { oldest: string | null; newest: string | null } | null;
+      const row = tsRange.get() as { oldest: string | null; newest: string | null } | undefined;
       return { oldest: row?.oldest ?? null, newest: row?.newest ?? null };
     },
 
     getLastIndexedAt(): string | null {
-      const row = getMetadata.get("last_indexed_at") as { value: string } | null;
+      const row = getMetadata.get("last_indexed_at") as { value: string } | undefined;
       return row?.value ?? null;
     },
 
@@ -309,7 +322,7 @@ export function openDatabase(dbPath: string): JoaDb {
       try {
         const row = db.prepare("PRAGMA integrity_check").get() as {
           integrity_check: string;
-        } | null;
+        } | undefined;
         return row?.integrity_check === "ok";
       } catch {
         return false;
