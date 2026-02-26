@@ -7,8 +7,8 @@ import { makeEntry } from "./helpers.ts";
 describe("db", () => {
   let db: JoaDb;
 
-  beforeEach(() => {
-    db = openDatabase(":memory:");
+  beforeEach(async () => {
+    db = await openDatabase(":memory:");
   });
 
   afterEach(() => {

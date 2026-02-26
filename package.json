@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Journal of Agents — persistent activity journal for AI agents",
-  "main": "dist/core/index.js",
   "bin": {
     "joa": "dist/cli/main.js"
   },

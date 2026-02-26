@@ -12,8 +12,8 @@ describe("query", () => {
   let ctx: ReadContext;
   const config = defaultConfig();
 
-  beforeEach(() => {
-    db = openDatabase(":memory:");
+  beforeEach(async () => {
+    db = await openDatabase(":memory:");
     ctx = { db };
   });
 

@@ -11,8 +11,8 @@ describe("status", () => {
   const config = defaultConfig();
   const sid = sessionId();
 
-  beforeEach(() => {
-    db = openDatabase(":memory:");
+  beforeEach(async () => {
+    db = await openDatabase(":memory:");
   });
 
   afterEach(() => {

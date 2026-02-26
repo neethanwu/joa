@@ -43,7 +43,7 @@ export async function bootstrap(opts?: BootstrapOptions): Promise<BootstrapResul
   const dbPath = resolveDbPath(config);
   mkdirSync(dirname(dbPath), { recursive: true });
   mkdirSync(resolveJournalsPath(config), { recursive: true });
-  const db = openDatabase(dbPath);
+  const db = await openDatabase(dbPath);
   await checkAndSyncIfStale(db, resolveJournalsPath(config));
   const sid = sessionId();
   const agent = opts?.agent ?? config.defaults.agent ?? "cli";

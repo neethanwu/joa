@@ -28,8 +28,8 @@ describe("sync", () => {
   let db: JoaDb;
   let tmp: string;
 
-  beforeEach(() => {
-    db = openDatabase(":memory:");
+  beforeEach(async () => {
+    db = await openDatabase(":memory:");
     tmp = mkdtempSync(join(tmpdir(), "joa-sync-test-"));
   });
 

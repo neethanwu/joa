@@ -61,7 +61,7 @@ describe("bootstrap", () => {
       await import("../../src/core/index.ts");
 
     tmp = mkdtempSync(join(tmpdir(), "joa-bootstrap-test-"));
-    const db = openDatabase(":memory:");
+    const db = await openDatabase(":memory:");
     const config = loadConfig(tmp); // Use temp dir so no .joa.yaml is found
     const journalsDir = join(tmp, "journals");
     await checkAndSyncIfStale(db, journalsDir);

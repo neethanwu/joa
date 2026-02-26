@@ -23,15 +23,23 @@ interface SqliteDatabaseCtor {
 }
 
 // Runtime shim: bun:sqlite under Bun, better-sqlite3 under Node.js.
-// String concatenation prevents tsc/Node from resolving the bun: specifier.
-const isBun = typeof globalThis.Bun !== "undefined";
-let DatabaseCtor: SqliteDatabaseCtor;
-if (isBun) {
-  const mod = await import("bun:" + "sqlite");
-  DatabaseCtor = mod.Database as SqliteDatabaseCtor;
-} else {
-  const mod = await import("better-sqlite3");
-  DatabaseCtor = mod.default as SqliteDatabaseCtor;
+// Lazily resolved on first openDatabase() call so that importing this module
+// does not trigger a top-level await — fast-exit paths (--help, --version)
+// never pay the cost of dynamically importing the SQLite driver.
+let _DatabaseCtor: SqliteDatabaseCtor | null = null;
+
+async function getDatabaseCtor(): Promise<SqliteDatabaseCtor> {
+  if (_DatabaseCtor) return _DatabaseCtor;
+  // String concatenation prevents tsc/Node from resolving the bun: specifier.
+  const isBun = typeof globalThis.Bun !== "undefined";
+  if (isBun) {
+    const mod = await import("bun:" + "sqlite");
+    _DatabaseCtor = mod.Database as SqliteDatabaseCtor;
+  } else {
+    const mod = await import("better-sqlite3");
+    _DatabaseCtor = mod.default as SqliteDatabaseCtor;
+  }
+  return _DatabaseCtor;
 }
 
 export interface QueryParams {
@@ -182,7 +190,8 @@ function buildWhereClause(params: QueryParams): { sql: string; values: BindValue
 }
 
 /** Opens and initializes the joa SQLite database. Returns a JoaDb instance. */
-export function openDatabase(dbPath: string): JoaDb {
+export async function openDatabase(dbPath: string): Promise<JoaDb> {
+  const DatabaseCtor = await getDatabaseCtor();
   const db = new DatabaseCtor(dbPath);
 
   db.exec("PRAGMA journal_mode = WAL;");
@@ -290,7 +299,7 @@ export function openDatabase(dbPath: string): JoaDb {
     countEntries(params: QueryParams): number {
       const { sql: where, values } = buildWhereClause(params);
       const query = `SELECT COUNT(*) as cnt FROM entries e ${where}`;
-      const row = db.prepare(query).get(...values) as { cnt: number } | undefined;
+      const row = db.prepare(query).get(...values) as { cnt: number } | null | undefined;
       return row?.cnt ?? 0;
     },
 
@@ -308,12 +317,15 @@ export function openDatabase(dbPath: string): JoaDb {
     },
 
     getEntryTimestampRange(): { oldest: string | null; newest: string | null } {
-      const row = tsRange.get() as { oldest: string | null; newest: string | null } | undefined;
+      const row = tsRange.get() as
+        | { oldest: string | null; newest: string | null }
+        | null
+        | undefined;
       return { oldest: row?.oldest ?? null, newest: row?.newest ?? null };
     },
 
     getLastIndexedAt(): string | null {
-      const row = getMetadata.get("last_indexed_at") as { value: string } | undefined;
+      const row = getMetadata.get("last_indexed_at") as { value: string } | null | undefined;
       return row?.value ?? null;
     },
 
@@ -340,6 +352,7 @@ export function openDatabase(dbPath: string): JoaDb {
           | {
               integrity_check: string;
             }
+          | null
           | undefined;
         return row?.integrity_check === "ok";
       } catch {

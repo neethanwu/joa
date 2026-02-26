@@ -21,8 +21,8 @@ describe("MCP: joa_log tool", () => {
   let tmp: string;
   let logCtx: LogContext;
 
-  beforeEach(() => {
-    db = openDatabase(":memory:");
+  beforeEach(async () => {
+    db = await openDatabase(":memory:");
     tmp = mkdtempSync(join(tmpdir(), "joa-mcp-test-"));
     logCtx = makeLogCtx(db, tmp, { agent: "mcp-test" });
   });
@@ -84,7 +84,7 @@ describe("MCP: joa_query tool", () => {
   const config = defaultConfig();
 
   beforeEach(async () => {
-    db = openDatabase(":memory:");
+    db = await openDatabase(":memory:");
     tmp = mkdtempSync(join(tmpdir(), "joa-mcp-query-test-"));
     const ctx = makeLogCtx(db, tmp, { agent: "mcp-test" });
     await log({ category: "decision", summary: "Chose Postgres" }, ctx);
@@ -134,8 +134,8 @@ describe("MCP: --agent flag", () => {
   let db: JoaDb;
   let tmp: string;
 
-  beforeEach(() => {
-    db = openDatabase(":memory:");
+  beforeEach(async () => {
+    db = await openDatabase(":memory:");
     tmp = mkdtempSync(join(tmpdir(), "joa-mcp-agent-test-"));
   });
 
@@ -211,7 +211,7 @@ describe("MCP: joa_status tool", () => {
   let tmp: string;
 
   beforeEach(async () => {
-    db = openDatabase(":memory:");
+    db = await openDatabase(":memory:");
     tmp = mkdtempSync(join(tmpdir(), "joa-mcp-status-test-"));
     const ctx = makeLogCtx(db, tmp, { agent: "mcp-test" });
     await log({ category: "decision", summary: "test" }, ctx);

@@ -16,8 +16,8 @@ describe("log", () => {
   let tmp: string;
   let ctx: LogContext;
 
-  beforeEach(() => {
-    db = openDatabase(":memory:");
+  beforeEach(async () => {
+    db = await openDatabase(":memory:");
     tmp = mkdtempSync(join(tmpdir(), "joa-log-test-"));
     ctx = makeLogCtx(db, tmp, { defaultTags: ["default-tag"] });
   });

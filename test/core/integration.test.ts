@@ -24,7 +24,7 @@ describe("integration: write → sync → query cycle", () => {
   const config = defaultConfig();
 
   beforeAll(async () => {
-    db = openDatabase(":memory:");
+    db = await openDatabase(":memory:");
     tmp = mkdtempSync(join(tmpdir(), "joa-integration-"));
     const sid = sessionId();
     ctx = {

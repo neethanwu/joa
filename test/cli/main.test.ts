@@ -22,7 +22,7 @@ describe("CLI: export/import", () => {
   let ctx: LogContext;
 
   beforeEach(async () => {
-    db = openDatabase(":memory:");
+    db = await openDatabase(":memory:");
     tmp = mkdtempSync(join(tmpdir(), "joa-cli-export-test-"));
     ctx = makeLogCtx(db, tmp);
     await log({ category: "decision", summary: "Chose Postgres" }, ctx);
@@ -52,7 +52,7 @@ describe("CLI: export/import", () => {
     const jsonlContent = result.entries.map((e) => JSON.stringify(serializeEntry(e))).join("\n");
 
     // Create new DB to import into
-    const db2 = openDatabase(":memory:");
+    const db2 = await openDatabase(":memory:");
     const tmp2 = mkdtempSync(join(tmpdir(), "joa-cli-import-test-"));
 
     const lines = jsonlContent.split("\n").filter((l) => l.trim().length > 0);
