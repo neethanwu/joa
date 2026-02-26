@@ -1,0 +1,29 @@
+{
+  "name": "joa",
+  "owner": {
+    "name": "neethan",
+    "email": "neethan@hallid.ai"
+  },
+  "plugins": [
+    {
+      "name": "joa",
+      "source": "./",
+      "description": "Persistent activity journal for AI agents. Log decisions, file changes, errors, and observations — then query them for context across sessions.",
+      "version": "0.1.0",
+      "author": {
+        "name": "neethan",
+        "email": "neethan@hallid.ai"
+      },
+      "repository": "https://github.com/neethanwu/joa",
+      "license": "MIT",
+      "keywords": ["journal", "logging", "context", "memory", "agents"],
+      "skills": ["./skills/"],
+      "mcpServers": {
+        "joa": {
+          "command": "joa",
+          "args": ["mcp", "--agent", "claude-code"]
+        }
+      }
+    }
+  ]
+}

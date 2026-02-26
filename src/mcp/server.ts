@@ -23,8 +23,11 @@ function errorResponse(toolName: string, err: unknown) {
   return { ...textContent(`Error: ${message}`), isError: true as const };
 }
 
-// Bootstrap once at server startup
-const { config, readCtx, logCtx, sid } = await bootstrap({ agent: "mcp" });
+// Agent name is set by the CLI dispatcher via JOA_MCP_AGENT env var
+// before dynamic-importing this module (see src/cli/main.ts "mcp" case).
+const { config, readCtx, logCtx, sid } = await bootstrap({
+  agent: process.env.JOA_MCP_AGENT ?? "mcp",
+});
 
 const server = new McpServer({
   name: "joa",

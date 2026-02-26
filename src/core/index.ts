@@ -47,5 +47,5 @@ export {
 export { sessionId, entryId, threadId } from "./ids.ts";
 
 // Bootstrap
-export { bootstrap } from "./bootstrap.ts";
+export { bootstrap, validateAgentName } from "./bootstrap.ts";
 export type { BootstrapResult, BootstrapOptions } from "./bootstrap.ts";

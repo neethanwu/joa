@@ -133,7 +133,12 @@ Supported keys: device, agent, defaults.device, defaults.agent,
       console.log(`Usage: joa setup
 
 Interactive setup to configure joa for your agent platforms.
-Supports Claude Code, Cursor, and Windsurf.`);
+
+Universal (always included):
+  Claude Code, Cursor, Gemini CLI, Codex, Amp, OpenCode
+
+Additional (selectable):
+  GitHub Copilot, Pi`);
       return;
 
     default:
@@ -155,7 +160,7 @@ ${bold("Commands:")}
   import <file>     Import entries from JSONL
   setup             Configure joa for agent platforms
   config get|set    View or update configuration
-  mcp               Start MCP stdio server
+  mcp [--agent <n>] Start MCP stdio server
 
 ${bold("Flags:")}
   -h, --help        Show help (or command-specific help)
@@ -360,27 +365,218 @@ async function cmdImport(cmdArgs: string[]): Promise<void> {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Agent registry — config paths and write strategies per platform
+// ---------------------------------------------------------------------------
+
+interface AgentDef {
+  label: string;
+  tier: "universal" | "additional";
+  globalPath: (home: string) => string;
+  localPath: (cwd: string) => string;
+  writeConfig: (configPath: string, agentName: string) => void;
+}
+
+function writeJsonMcpServers(
+  configPath: string,
+  serverEntry: Record<string, unknown>,
+  rootKey = "mcpServers",
+): void {
+  const dir = dirname(configPath);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+
+  let existing: Record<string, unknown> = {};
+  if (existsSync(configPath)) {
+    try {
+      existing = JSON.parse(readFileSync(configPath, "utf8"));
+    } catch {
+      console.warn(yellow(`Warning: ${configPath} contains invalid JSON and will be overwritten`));
+    }
+  }
+
+  const merged = {
+    ...existing,
+    [rootKey]: {
+      ...(existing[rootKey] as Record<string, unknown> | undefined),
+      ...serverEntry,
+    },
+  };
+
+  writeFileSync(configPath, JSON.stringify(merged, null, 2));
+}
+
+function standardWriter(configPath: string, agentName: string): void {
+  writeJsonMcpServers(configPath, {
+    joa: { command: "joa", args: ["mcp", "--agent", agentName] },
+  });
+}
+
+const AGENTS: Record<string, AgentDef> = {
+  // --- Universal ---
+  "claude-code": {
+    label: "Claude Code",
+    tier: "universal",
+    globalPath: (home) => join(home, ".claude.json"),
+    localPath: (cwd) => join(cwd, ".mcp.json"),
+    writeConfig: standardWriter,
+  },
+  cursor: {
+    label: "Cursor",
+    tier: "universal",
+    globalPath: (home) => join(home, ".cursor", "mcp.json"),
+    localPath: (cwd) => join(cwd, ".cursor", "mcp.json"),
+    writeConfig: standardWriter,
+  },
+  "gemini-cli": {
+    label: "Gemini CLI",
+    tier: "universal",
+    globalPath: (home) => join(home, ".gemini", "settings.json"),
+    localPath: (cwd) => join(cwd, ".gemini", "settings.json"),
+    writeConfig: standardWriter,
+  },
+  codex: {
+    label: "Codex",
+    tier: "universal",
+    globalPath: (home) => join(home, ".codex", "config.toml"),
+    localPath: (cwd) => join(cwd, ".codex", "config.toml"),
+    writeConfig: (configPath, agentName) => {
+      const dir = dirname(configPath);
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+
+      // Codex uses TOML. Read existing, append/replace the [mcp_servers.joa] section.
+      let existing = "";
+      if (existsSync(configPath)) {
+        try {
+          existing = readFileSync(configPath, "utf8");
+        } catch {
+          console.warn(yellow(`Warning: ${configPath} is unreadable and will be overwritten`));
+        }
+      }
+
+      // Remove existing [mcp_servers.joa] block if present
+      const cleaned = existing.replace(/\[mcp_servers\.joa\][^\[]*(?=\[|$)/s, "").trimEnd();
+
+      const block = `\n\n[mcp_servers.joa]\ncommand = "joa"\nargs = ["mcp", "--agent", "${agentName}"]\n`;
+      writeFileSync(configPath, cleaned + block);
+    },
+  },
+  amp: {
+    label: "Amp",
+    tier: "universal",
+    globalPath: (home) => join(home, ".config", "amp", "settings.json"),
+    localPath: (cwd) => join(cwd, ".amp", "settings.json"),
+    writeConfig: (configPath, agentName) => {
+      writeJsonMcpServers(
+        configPath,
+        { joa: { command: "joa", args: ["mcp", "--agent", agentName] } },
+        "amp.mcpServers",
+      );
+    },
+  },
+  opencode: {
+    label: "OpenCode",
+    tier: "universal",
+    globalPath: (home) => join(home, ".config", "opencode", "opencode.json"),
+    localPath: (cwd) => join(cwd, "opencode.json"),
+    writeConfig: (configPath, agentName) => {
+      const dir = dirname(configPath);
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+
+      let existing: Record<string, unknown> = {};
+      if (existsSync(configPath)) {
+        try {
+          existing = JSON.parse(readFileSync(configPath, "utf8"));
+        } catch {
+          console.warn(
+            yellow(`Warning: ${configPath} contains invalid JSON and will be overwritten`),
+          );
+        }
+      }
+
+      const mcp = (existing.mcp as Record<string, unknown> | undefined) ?? {};
+      const merged = {
+        ...existing,
+        mcp: {
+          ...mcp,
+          joa: {
+            type: "local",
+            command: ["joa", "mcp", "--agent", agentName],
+          },
+        },
+      };
+      writeFileSync(configPath, JSON.stringify(merged, null, 2));
+    },
+  },
+
+  // --- Additional ---
+  "github-copilot": {
+    label: "GitHub Copilot",
+    tier: "additional",
+    globalPath: (_home) => {
+      if (process.platform === "darwin")
+        return join(homedir(), "Library", "Application Support", "Code", "User", "mcp.json");
+      if (process.platform === "win32")
+        return join(process.env.APPDATA ?? homedir(), "Code", "User", "mcp.json");
+      return join(homedir(), ".config", "Code", "User", "mcp.json");
+    },
+    localPath: (cwd) => join(cwd, ".vscode", "mcp.json"),
+    writeConfig: (configPath, agentName) => {
+      writeJsonMcpServers(
+        configPath,
+        {
+          joa: {
+            type: "stdio",
+            command: "joa",
+            args: ["mcp", "--agent", agentName],
+          },
+        },
+        "servers",
+      );
+    },
+  },
+  pi: {
+    label: "Pi",
+    tier: "additional",
+    globalPath: (home) => join(home, ".pi", "mcp.json"),
+    localPath: (cwd) => join(cwd, ".pi", "mcp.json"),
+    writeConfig: standardWriter,
+  },
+};
+
+const UNIVERSAL_AGENTS = Object.entries(AGENTS)
+  .filter(([, def]) => def.tier === "universal")
+  .map(([id]) => id);
+
+const ADDITIONAL_AGENTS = Object.entries(AGENTS)
+  .filter(([, def]) => def.tier === "additional")
+  .map(([id, def]) => ({ value: id, label: def.label }));
+
+// ---------------------------------------------------------------------------
+// joa setup
+// ---------------------------------------------------------------------------
+
 async function cmdSetup(): Promise<void> {
-  const { intro, outro, multiselect, select, confirm, isCancel, cancel } = await import(
+  const { intro, outro, note, multiselect, select, confirm, isCancel, cancel } = await import(
     "@clack/prompts"
   );
 
   intro(bold("joa setup"));
 
-  const agents = await multiselect({
-    message: "Which agents do you want to configure?",
-    options: [
-      { value: "claude-code", label: "Claude Code" },
-      { value: "cursor", label: "Cursor" },
-      { value: "windsurf", label: "Windsurf" },
-    ],
-    required: true,
+  const universalLabels = UNIVERSAL_AGENTS.map((id) => `  \u2022 ${AGENTS[id]?.label}`).join("\n");
+  note(universalLabels, "Universal agents (always included)");
+
+  const additional = await multiselect({
+    message: "Select additional agents (Enter to skip)",
+    options: ADDITIONAL_AGENTS,
+    required: false,
   });
 
-  if (isCancel(agents)) {
+  if (isCancel(additional)) {
     cancel("Setup cancelled.");
     process.exit(0);
   }
+
+  const allAgents = [...UNIVERSAL_AGENTS, ...(additional as string[])];
 
   const scope = await select({
     message: "Installation scope?",
@@ -388,9 +584,9 @@ async function cmdSetup(): Promise<void> {
       {
         value: "global" as const,
         label: "Global",
-        hint: "~/.claude.json, ~/.cursor/mcp.json, etc.",
+        hint: "user-level config files",
       },
-      { value: "local" as const, label: "Local", hint: ".mcp.json in current project" },
+      { value: "local" as const, label: "Local", hint: "project-level config files" },
     ],
   });
 
@@ -399,8 +595,9 @@ async function cmdSetup(): Promise<void> {
     process.exit(0);
   }
 
+  const agentList = allAgents.map((id) => AGENTS[id]?.label ?? id).join(", ");
   const proceed = await confirm({
-    message: `Configure joa for ${(agents as string[]).join(", ")} (${scope})?`,
+    message: `Configure joa for ${agentList} (${scope})?`,
   });
 
   if (isCancel(proceed) || !proceed) {
@@ -408,79 +605,23 @@ async function cmdSetup(): Promise<void> {
     process.exit(0);
   }
 
-  const joaBin = process.argv[1] ?? "joa";
-  const mcpConfig = {
-    joa: {
-      command: "bun",
-      args: ["run", joaBin, "mcp"],
-    },
-  };
-
   // Ensure ~/.joa directory structure
   const joaDir = join(homedir(), ".joa");
   const journalsDir = join(joaDir, "journals");
   if (!existsSync(joaDir)) mkdirSync(joaDir, { recursive: true });
   if (!existsSync(journalsDir)) mkdirSync(journalsDir, { recursive: true });
 
-  for (const agent of agents as string[]) {
-    const configPath = getAgentConfigPath(agent, scope);
-    writeMcpConfig(configPath, mcpConfig);
-    console.log(green(`  \u2713 ${agent}`) + dim(` \u2192 ${configPath}`));
+  const home = homedir();
+  const cwd = process.cwd();
+  for (const agentId of allAgents) {
+    const def = AGENTS[agentId];
+    if (!def) continue;
+    const configPath = scope === "local" ? def.localPath(cwd) : def.globalPath(home);
+    def.writeConfig(configPath, agentId);
+    console.log(green(`  \u2713 ${def.label}`) + dim(` \u2192 ${configPath}`));
   }
 
   outro(green("Done! joa is ready."));
-}
-
-function getAgentConfigPath(agent: string, scope: string): string {
-  const home = homedir();
-  if (scope === "local") {
-    switch (agent) {
-      case "claude-code":
-        return join(process.cwd(), ".mcp.json");
-      case "cursor":
-        return join(process.cwd(), ".cursor", "mcp.json");
-      case "windsurf":
-        return join(process.cwd(), ".windsurf", "mcp.json");
-      default:
-        return join(process.cwd(), ".mcp.json");
-    }
-  }
-  switch (agent) {
-    case "claude-code":
-      return join(home, ".claude.json");
-    case "cursor":
-      return join(home, ".cursor", "mcp.json");
-    case "windsurf":
-      return join(home, ".windsurf", "mcp.json");
-    default:
-      return join(home, ".mcp.json");
-  }
-}
-
-function writeMcpConfig(configPath: string, mcpConfig: Record<string, unknown>): void {
-  const dir = dirname(configPath);
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
-  }
-
-  let existing: Record<string, unknown> = {};
-  if (existsSync(configPath)) {
-    try {
-      existing = JSON.parse(readFileSync(configPath, "utf8"));
-    } catch {
-      // File exists but is malformed — overwrite
-    }
-  }
-
-  const merged = {
-    ...existing,
-    mcpServers: {
-      ...(existing.mcpServers as Record<string, unknown> | undefined),
-      ...mcpConfig,
-    },
-  };
-
-  writeFileSync(configPath, JSON.stringify(merged, null, 2));
 }
 
 function cmdConfigGet(key: string | undefined): void {
@@ -640,6 +781,7 @@ try {
       break;
     }
     case "mcp":
+      if (values.agent) process.env.JOA_MCP_AGENT = values.agent;
       await import("../mcp/server.ts");
       break;
     default:

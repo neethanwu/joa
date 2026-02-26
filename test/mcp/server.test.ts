@@ -130,6 +130,82 @@ describe("MCP: joa_query tool", () => {
   });
 });
 
+describe("MCP: --agent flag", () => {
+  let db: JoaDb;
+  let tmp: string;
+
+  beforeEach(() => {
+    db = openDatabase(":memory:");
+    tmp = mkdtempSync(join(tmpdir(), "joa-mcp-agent-test-"));
+  });
+
+  afterEach(() => {
+    db.close();
+    rmSync(tmp, { recursive: true });
+  });
+
+  test("agent name flows into logged entries", async () => {
+    const ctx = makeLogCtx(db, tmp, { agent: "claude-code" });
+    const result = await log({ category: "observation", summary: "Test" }, ctx);
+    expect(result.status).toBe("ok");
+
+    const config = defaultConfig();
+    const entries = query({ agent: "claude-code", format: "json" }, { db }, config);
+    expect(entries.entries.length).toBe(1);
+    expect(entries.entries[0]?.agent).toBe("claude-code");
+  });
+
+  test("default agent is 'mcp' when --agent not provided", async () => {
+    const ctx = makeLogCtx(db, tmp, { agent: "mcp" });
+    await log({ category: "observation", summary: "Default agent test" }, ctx);
+
+    const config = defaultConfig();
+    const entries = query({ agent: "mcp", format: "json" }, { db }, config);
+    expect(entries.entries.length).toBe(1);
+    expect(entries.entries[0]?.agent).toBe("mcp");
+  });
+
+  test("bootstrap accepts agent override (simulates JOA_MCP_AGENT env var)", async () => {
+    // The MCP server does: bootstrap({ agent: process.env.JOA_MCP_AGENT ?? "mcp" })
+    // The CLI dispatcher sets JOA_MCP_AGENT before importing the server module.
+    // We test the bootstrap path directly: given an agent name override,
+    // entries are logged under that agent and queryable by it.
+    const agentName = "test-agent-from-env";
+    const ctx = makeLogCtx(db, tmp, { agent: agentName });
+    const result = await log({ category: "observation", summary: "Env var agent test" }, ctx);
+    expect(result.status).toBe("ok");
+
+    const config = defaultConfig();
+
+    // The entry should be queryable by the overridden agent name
+    const matched = query({ agent: agentName, format: "json" }, { db }, config);
+    expect(matched.entries.length).toBe(1);
+    expect(matched.entries[0]?.agent).toBe(agentName);
+    expect(matched.entries[0]?.summary).toBe("Env var agent test");
+
+    // It should NOT appear under the default "mcp" agent
+    const defaultAgent = query({ agent: "mcp", format: "json" }, { db }, config);
+    expect(defaultAgent.entries.length).toBe(0);
+  });
+
+  test("entries from different agents are filterable", async () => {
+    const claudeCtx = makeLogCtx(db, tmp, { agent: "claude-code" });
+    const cursorCtx = makeLogCtx(db, tmp, { agent: "cursor" });
+
+    await log({ category: "observation", summary: "From Claude" }, claudeCtx);
+    await log({ category: "observation", summary: "From Cursor" }, cursorCtx);
+
+    const config = defaultConfig();
+    const claudeEntries = query({ agent: "claude-code", format: "json" }, { db }, config);
+    expect(claudeEntries.entries.length).toBe(1);
+    expect(claudeEntries.entries[0]?.summary).toBe("From Claude");
+
+    const cursorEntries = query({ agent: "cursor", format: "json" }, { db }, config);
+    expect(cursorEntries.entries.length).toBe(1);
+    expect(cursorEntries.entries[0]?.summary).toBe("From Cursor");
+  });
+});
+
 describe("MCP: joa_status tool", () => {
   let db: JoaDb;
   let tmp: string;

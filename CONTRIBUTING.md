@@ -16,9 +16,8 @@ bunx tsc --noEmit  # Type check
 
 ## Project Structure
 
-- `src/core/` — Pure TypeScript library (Phase 1A)
+- `src/core/` — Pure TypeScript library
 - `test/core/` — Unit and integration tests
-- `docs/plans/` — Implementation plans by phase
 
 ## Module Layers
 
