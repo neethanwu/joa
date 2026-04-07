@@ -2,7 +2,7 @@
 name: joa
 description: Persistent activity journal for AI agents. Use joa to log decisions, file changes, errors, observations, and conversations — then query them for context in future sessions. Use at session start for catchup, mid-session when prior context would help, and throughout to log meaningful events.
 license: MIT
-compatibility: Requires joa CLI installed via `npm install -g joa`, or the joa MCP server configured for your agent platform.
+compatibility: Requires joa CLI installed via `npm install -g @neethan/joa`, or the joa MCP server configured for your agent platform.
 metadata:
   author: neethan
   version: "0.1.0"

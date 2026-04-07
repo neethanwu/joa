@@ -3,7 +3,7 @@
 ## Install
 
 ```bash
-npm install -g joa
+npm install -g @neethan/joa
 ```
 
 ## Configure MCP Client

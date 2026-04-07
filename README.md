@@ -1,7 +1,7 @@
 # joa
 
 [![CI](https://github.com/neethanwu/joa/actions/workflows/ci.yml/badge.svg)](https://github.com/neethanwu/joa/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/joa)](https://www.npmjs.com/package/joa)
+[![npm](https://img.shields.io/npm/v/@neethan/joa)](https://www.npmjs.com/package/@neethan/joa)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Persistent activity journal for AI agents. Log decisions, file changes, errors, and observations — then query them for context across sessions.
@@ -15,7 +15,7 @@ Works as a **CLI tool** and as an **MCP server** for agent platforms like Claude
 ## Install
 
 ```bash
-npm install -g joa
+npm install -g @neethan/joa
 ```
 
 Requires Node.js >= 18.
