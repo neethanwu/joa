@@ -8,7 +8,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write # GitHub Release creation
       id-token: write # npm provenance
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -38,7 +38,20 @@ jobs:
           node dist/cli/main.js query --limit 1
           node dist/cli/main.js status
 
-      # Publish
+      # Publish to npm
       - run: npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # Create GitHub Release from changelog
+      - name: Extract changelog for this version
+        id: changelog
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          NOTES=$(awk "/^## \\[$VERSION\\]/{found=1; next} /^## \\[/{if(found) exit} found{print}" CHANGELOG.md)
+          echo "notes<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$NOTES" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+      - run: gh release create "${{ github.ref_name }}" --title "${{ github.ref_name }}" --notes "${{ steps.changelog.outputs.notes }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
