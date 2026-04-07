@@ -1,5 +1,5 @@
 {
-  "name": "joa",
+  "name": "@neethan/joa",
   "version": "0.1.0",
   "type": "module",
   "description": "Journal of Agents — persistent activity journal for AI agents",
